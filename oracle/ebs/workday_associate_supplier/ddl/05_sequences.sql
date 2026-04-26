@@ -1,0 +1,25 @@
+--------------------------------------------------------------------------------
+-- File         : 05_sequences.sql
+-- Purpose      : Surrogate-key sequences for Workday integration objects.
+-- EBS Release  : 12.2.12
+--------------------------------------------------------------------------------
+WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+SET DEFINE OFF;
+
+CREATE SEQUENCE XX_WD_EMPLOYEE_STG_S
+    START WITH 1 INCREMENT BY 1 NOCACHE NOORDER NOCYCLE;
+
+CREATE SEQUENCE XX_WD_EXP_HDR_STG_S
+    START WITH 1 INCREMENT BY 1 NOCACHE NOORDER NOCYCLE;
+
+CREATE SEQUENCE XX_WD_EXP_LINE_STG_S
+    START WITH 1 INCREMENT BY 1 NOCACHE NOORDER NOCYCLE;
+
+CREATE SEQUENCE XX_WD_INTEGRATION_LOG_S
+    START WITH 1 INCREMENT BY 1 CACHE 100 NOORDER NOCYCLE;
+
+CREATE SEQUENCE XX_WD_RUN_SUMMARY_S
+    START WITH 1 INCREMENT BY 1 NOCACHE NOORDER NOCYCLE;
+
+PROMPT Created sequences
+EXIT;
