@@ -1,0 +1,184 @@
+#
+# $Header: XXWD_EMP_SUP_PRG.ldt 1.0 17-MAY-2026 XX-DEV $
+#
+# +============================================================+
+# | LDT for Workday Employee Supplier Inbound concurrent program |
+# | Module : Oracle EBS R12.2.12 - Accounts Payable              |
+# |                                                              |
+# | Upload :                                                     |
+# |   FNDLOAD apps/<pwd> 0 Y UPLOAD                              |
+# |     $FND_TOP/patch/115/import/afcpprog.lct XXWD_EMP_SUP_PRG.ldt|
+# |                                                              |
+# | Download (for reference):                                    |
+# |   FNDLOAD apps/<pwd> 0 Y DOWNLOAD                            |
+# |     $FND_TOP/patch/115/import/afcpprog.lct XXWD_EMP_SUP_PRG.ldt|
+# |     PROGRAM APPLICATION_SHORT_NAME="SQLAP"                   |
+# |     CONCURRENT_PROGRAM_NAME="XXWD_EMP_SUP_PRG"               |
+# +============================================================+
+#
+LANGUAGE = "US"
+
+# DEFINE FND_EXECUTABLE
+DEFINE FND_EXECUTABLE
+  KEY   = "EXECUTABLE_NAME APPLICATION_SHORT_NAME"
+  CTX   = "OWNER"
+  TRANS = "USER_EXECUTABLE_NAME DESCRIPTION"
+"EXECUTABLE_NAME"        VARCHAR2(30)
+"APPLICATION_SHORT_NAME" VARCHAR2(50)
+"EXECUTION_METHOD_CODE"  VARCHAR2(1)
+"EXECUTION_FILE_NAME"    VARCHAR2(240)
+"SUBROUTINE_NAME"        VARCHAR2(240)
+"USER_EXECUTABLE_NAME"   VARCHAR2(80)
+"DESCRIPTION"            VARCHAR2(240)
+END DEFINE
+
+# DEFINE FND_CONCURRENT_PROGRAM
+DEFINE FND_CONCURRENT_PROGRAM
+  KEY   = "CONCURRENT_PROGRAM_NAME APPLICATION_SHORT_NAME"
+  CTX   = "OWNER"
+  TRANS = "USER_CONCURRENT_PROGRAM_NAME DESCRIPTION"
+"CONCURRENT_PROGRAM_NAME"      VARCHAR2(30)
+"APPLICATION_SHORT_NAME"       VARCHAR2(50)
+"USER_CONCURRENT_PROGRAM_NAME" VARCHAR2(240)
+"DESCRIPTION"                  VARCHAR2(240)
+"EXECUTABLE_NAME"              VARCHAR2(30)
+"EXECUTABLE_APPLICATION"       VARCHAR2(50)
+"EXECUTION_OPTIONS"            VARCHAR2(240)
+"PRIORITY"                     NUMBER(15)
+"SAVE_OUTPUT_FLAG"             VARCHAR2(1)
+"PRINT_FLAG"                   VARCHAR2(1)
+"REQUIRED_STYLE"               VARCHAR2(1)
+"OUTPUT_PRINT_STYLE"           VARCHAR2(30)
+"PRINTER_NAME"                 VARCHAR2(30)
+"MIN_WIDTH"                    NUMBER(15)
+"MIN_LENGTH"                   NUMBER(15)
+"RUN_ALONE_FLAG"               VARCHAR2(1)
+"ENABLED_FLAG"                 VARCHAR2(1)
+"OUTPUT_FILE_TYPE"             VARCHAR2(30)
+"ENABLE_TRACE"                 VARCHAR2(1)
+"RESTART"                      VARCHAR2(1)
+"NLS_COMPLIANT"                VARCHAR2(1)
+"ICON_NAME"                    VARCHAR2(30)
+"SRS_FLAG"                     VARCHAR2(1)
+"USE_IN_SRS"                   VARCHAR2(1)
+"ALLOW_DISABLED_VALUES"        VARCHAR2(1)
+"REQUEST_TYPE"                 VARCHAR2(30)
+"REQUEST_TYPE_APPLICATION"     VARCHAR2(50)
+END DEFINE
+
+#----------------------------------------------------------------
+# Executable
+#----------------------------------------------------------------
+BEGIN FND_EXECUTABLE "XXWD_EMP_SUP_EXEC" "SQLAP"
+  OWNER                  = "ORACLE"
+  EXECUTION_METHOD_CODE  = "I"
+  EXECUTION_FILE_NAME    = "XXWD_EMP_SUPPLIER_PKG"
+  SUBROUTINE_NAME        = "main"
+  USER_EXECUTABLE_NAME   = "Workday Employee Supplier Inbound Executable"
+  DESCRIPTION            = "PL/SQL executable for Workday Employee Supplier inbound program"
+END FND_EXECUTABLE
+
+#----------------------------------------------------------------
+# Concurrent Program
+#----------------------------------------------------------------
+BEGIN FND_CONCURRENT_PROGRAM "XXWD_EMP_SUP_PRG" "SQLAP"
+  OWNER                        = "ORACLE"
+  USER_CONCURRENT_PROGRAM_NAME = "Workday Employee Supplier Inbound"
+  DESCRIPTION                  = "Creates EBS Employee Suppliers/Sites/Banks from Workday staging"
+  EXECUTABLE_NAME              = "XXWD_EMP_SUP_EXEC"
+  EXECUTABLE_APPLICATION       = "SQLAP"
+  EXECUTION_OPTIONS            = ""
+  PRIORITY                     = 50
+  SAVE_OUTPUT_FLAG             = "Y"
+  PRINT_FLAG                   = "N"
+  REQUIRED_STYLE               = "N"
+  OUTPUT_PRINT_STYLE           = "LANDWIDE"
+  MIN_WIDTH                    = 132
+  MIN_LENGTH                   = 45
+  RUN_ALONE_FLAG               = "N"
+  ENABLED_FLAG                 = "Y"
+  OUTPUT_FILE_TYPE             = "TEXT"
+  ENABLE_TRACE                 = "N"
+  RESTART                      = "Y"
+  NLS_COMPLIANT                = "N"
+  SRS_FLAG                     = "Y"
+  USE_IN_SRS                   = "Y"
+  ALLOW_DISABLED_VALUES        = "N"
+
+  #-----------------------------------------
+  # Parameters
+  #-----------------------------------------
+  BEGIN PROGRAM_PARAMETER "10"
+    OWNER             = "ORACLE"
+    END_USER_COLUMN_NAME = "P_ORG_ID"
+    COLUMN_SEQ_NUM    = 10
+    REQUIRED_FLAG     = "Y"
+    ENABLED_FLAG      = "Y"
+    DISPLAY_FLAG      = "Y"
+    DISPLAY_SIZE      = 15
+    PROMPT            = "Operating Unit"
+    TOKEN             = "P_ORG_ID"
+    VALUE_SET         = "XX_OPERATING_UNITS"
+    DESCRIPTION       = "Operating Unit / Org Id (Multi-OU)"
+  END PROGRAM_PARAMETER
+
+  BEGIN PROGRAM_PARAMETER "20"
+    OWNER             = "ORACLE"
+    END_USER_COLUMN_NAME = "P_BATCH_ID"
+    COLUMN_SEQ_NUM    = 20
+    REQUIRED_FLAG     = "N"
+    ENABLED_FLAG      = "Y"
+    DISPLAY_FLAG      = "Y"
+    DISPLAY_SIZE      = 15
+    PROMPT            = "Batch Id"
+    TOKEN             = "P_BATCH_ID"
+    VALUE_SET         = "FND_NUMBER"
+    DESCRIPTION       = "Optional batch id filter"
+  END PROGRAM_PARAMETER
+
+  BEGIN PROGRAM_PARAMETER "30"
+    OWNER             = "ORACLE"
+    END_USER_COLUMN_NAME = "P_EMPLOYEE_NUMBER"
+    COLUMN_SEQ_NUM    = 30
+    REQUIRED_FLAG     = "N"
+    ENABLED_FLAG      = "Y"
+    DISPLAY_FLAG      = "Y"
+    DISPLAY_SIZE      = 30
+    PROMPT            = "Employee Number"
+    TOKEN             = "P_EMPLOYEE_NUMBER"
+    VALUE_SET         = "FND_CHAR30"
+    DESCRIPTION       = "Optional single employee number filter"
+  END PROGRAM_PARAMETER
+
+  BEGIN PROGRAM_PARAMETER "40"
+    OWNER             = "ORACLE"
+    END_USER_COLUMN_NAME = "P_DEBUG_FLAG"
+    COLUMN_SEQ_NUM    = 40
+    REQUIRED_FLAG     = "Y"
+    ENABLED_FLAG      = "Y"
+    DISPLAY_FLAG      = "Y"
+    DISPLAY_SIZE      = 1
+    PROMPT            = "Debug Flag"
+    TOKEN             = "P_DEBUG_FLAG"
+    VALUE_SET         = "XX_YES_NO"
+    DEFAULT_TYPE      = "C"
+    DEFAULT_VALUE     = "N"
+    DESCRIPTION       = "Enable verbose logging (Y/N)"
+  END PROGRAM_PARAMETER
+
+  BEGIN PROGRAM_PARAMETER "50"
+    OWNER             = "ORACLE"
+    END_USER_COLUMN_NAME = "P_REPROCESS_ERRORS"
+    COLUMN_SEQ_NUM    = 50
+    REQUIRED_FLAG     = "Y"
+    ENABLED_FLAG      = "Y"
+    DISPLAY_FLAG      = "Y"
+    DISPLAY_SIZE      = 1
+    PROMPT            = "Reprocess Errors?"
+    TOKEN             = "P_REPROCESS_ERRORS"
+    VALUE_SET         = "XX_YES_NO"
+    DEFAULT_TYPE      = "C"
+    DEFAULT_VALUE     = "N"
+    DESCRIPTION       = "Re-process rows previously marked as ERROR"
+  END PROGRAM_PARAMETER
+END FND_CONCURRENT_PROGRAM
