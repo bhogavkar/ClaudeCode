@@ -11,14 +11,25 @@ AS
 
     -- =========================================================================
     -- Private: structured console logger
+    --   Writes to DBMS_OUTPUT (interactive / test use) and to FND_FILE.LOG
+    --   (Concurrent Program log file).  The FND_FILE write is wrapped in its
+    --   own exception block so the call is silently skipped when the procedure
+    --   is invoked outside a CP context (e.g. from SQL*Plus directly).
     -- =========================================================================
     PROCEDURE log_msg(p_proc IN VARCHAR2, p_msg IN VARCHAR2) IS
+        l_line VARCHAR2(4200);
     BEGIN
-        DBMS_OUTPUT.PUT_LINE(
-            TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS')
-            || ' [' || RPAD(p_proc, 26) || '] '
-            || p_msg
-        );
+        l_line := TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS')
+                  || ' [' || RPAD(p_proc, 26) || '] '
+                  || p_msg;
+
+        DBMS_OUTPUT.PUT_LINE(l_line);
+
+        BEGIN
+            FND_FILE.PUT_LINE(FND_FILE.LOG, l_line);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;   -- not running inside a CP — harmless
+        END;
     END log_msg;
 
     -- =========================================================================
@@ -700,6 +711,86 @@ AS
             x_message := 'Unhandled exception in ' || c_proc || ': ' || SQLERRM;
             log_msg(c_proc, x_message);
     END process_pdf;
+
+    -- =========================================================================
+    -- PROCEDURE: process_pdf_cp   (Concurrent Program entry point)
+    -- =========================================================================
+    PROCEDURE process_pdf_cp(
+        errbuf        OUT VARCHAR2,
+        retcode       OUT VARCHAR2,
+        p_file_name   IN  VARCHAR2,
+        p_invoice_num IN  VARCHAR2
+    ) IS
+        c_proc    CONSTANT VARCHAR2(30) := 'process_pdf_cp';
+        l_status  VARCHAR2(30);
+        l_message VARCHAR2(4000);
+    BEGIN
+        -- CP log header
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '============================================================');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            ' XX AP PDF Import - KSeF OpenText');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            ' Package  : XXCUST_AP_PDF_PKG');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            ' Procedure: PROCESS_PDF_CP');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            ' Run Date : ' || TO_CHAR(SYSDATE, 'DD-MON-YYYY HH24:MI:SS'));
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '============================================================');
+        FND_FILE.PUT_LINE(FND_FILE.LOG, '');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            'PARAMETERS');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '  PDF File Name   : ' || NVL(p_file_name,   '[NULL]'));
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '  AP Invoice Num  : ' || NVL(p_invoice_num, '[NULL]'));
+        FND_FILE.PUT_LINE(FND_FILE.LOG, '');
+
+        -- Delegate to the core orchestrator
+        process_pdf(
+            p_file_name   => p_file_name,
+            p_invoice_num => p_invoice_num,
+            x_status      => l_status,
+            x_message     => l_message
+        );
+
+        -- CP log footer
+        FND_FILE.PUT_LINE(FND_FILE.LOG, '');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '------------------------------------------------------------');
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            'RESULT STATUS  : ' || l_status);
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            'RESULT MESSAGE : ' || l_message);
+        FND_FILE.PUT_LINE(FND_FILE.LOG,
+            '------------------------------------------------------------');
+
+        -- Map internal status to Oracle CP return codes
+        --   '0' = Normal completion (green in SRS)
+        --   '1' = Warning           (yellow in SRS)
+        --   '2' = Error             (red in SRS)
+        IF l_status = G_STS_ATTACHED THEN
+            retcode := '0';
+            errbuf  := l_message;
+        ELSIF l_status = G_STS_ATTACH_ERR THEN
+            -- BLOB was loaded but FND attachment failed — operator can retry
+            retcode := '1';
+            errbuf  := 'WARNING - PDF staged but FND attachment failed: ' || l_message;
+        ELSE
+            retcode := '2';
+            errbuf  := 'ERROR: ' || l_message;
+        END IF;
+
+    EXCEPTION
+        WHEN OTHERS THEN
+            retcode := '2';
+            errbuf  := 'Unhandled exception in ' || c_proc || ': ' || SQLERRM;
+            BEGIN
+                FND_FILE.PUT_LINE(FND_FILE.LOG, errbuf);
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END;
+    END process_pdf_cp;
 
 END XXCUST_AP_PDF_PKG;
 /

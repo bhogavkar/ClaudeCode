@@ -1,0 +1,120 @@
+# $Header: XXCUST_AP_PDF_CP.ldt 1.0 2026/06/12 custom $
+#
+# FNDLOAD Data Template (LDT) — AP PDF Import Concurrent Program
+# Module  : Oracle Payables (AP) - R12
+# Loader  : $FND_TOP/patch/115/import/afcpprog.lct
+#
+# Objects defined in this file:
+#   1. FND Executable   : XXCUST_AP_PDF_EXE
+#      Calls            : XXCUST_AP_PDF_PKG.PROCESS_PDF_CP
+#   2. Concurrent Program: XXCUST_AP_PDF_PRG
+#      Display Name     : XX AP PDF Import - KSeF OpenText
+#      Parameters       : P_FILE_NAME (ARG1), P_INVOICE_NUM (ARG2)
+#
+# IMPORTANT: The executable references PROCESS_PDF_CP, not PROCESS_PDF.
+# PROCESS_PDF_CP has the mandatory errbuf/retcode OUT signature required
+# by the Oracle EBS Concurrent Manager framework.
+#
+# Load command (run as applmgr from $CUSTOM_TOP/import/):
+#   FNDLOAD apps/<pwd> 0 Y UPLOAD \
+#     $FND_TOP/patch/115/import/afcpprog.lct \
+#     XXCUST_AP_PDF_CP.ldt
+#
+
+LANGUAGE=AMERICAN
+CODESET=UTF8
+
+# ===========================================================================
+# EXECUTABLE: XXCUST_AP_PDF_EXE
+#   Execution Method P = PL/SQL Stored Procedure
+#   EXECUTION_FILE_NAME = package name
+#   SUBROUTINE_NAME     = procedure name within that package
+# ===========================================================================
+BEGIN EXECUTABLE "XXCUST_AP_PDF_EXE"
+  OWNER                        = "ORACLE"
+  LAST_UPDATE_DATE             = "2026/06/12"
+  EXECUTION_FILE_NAME          = "XXCUST_AP_PDF_PKG"
+  SUBROUTINE_NAME              = "PROCESS_PDF_CP"
+  EXECUTION_METHOD             = "P"
+  USER_EXECUTABLE_NAME         = "XX AP KSeF PDF Import Executable"
+  DESCRIPTION                  = "PL/SQL executable: XXCUST_AP_PDF_PKG.PROCESS_PDF_CP — imports KSeF PDFs and attaches to AP Invoice Header."
+  APPLICATION_SHORT_NAME       = "SQLAP"
+  IREP_CONTROLLER              = ""
+  LANGUAGE                     = "US"
+  SOURCE_LANG                  = "US"
+END EXECUTABLE
+
+# ===========================================================================
+# CONCURRENT PROGRAM: XXCUST_AP_PDF_PRG
+# ===========================================================================
+BEGIN CONCURRENT_PROGRAM "XXCUST_AP_PDF_PRG"
+  OWNER                              = "ORACLE"
+  LAST_UPDATE_DATE                   = "2026/06/12"
+  APPLICATION_SHORT_NAME             = "SQLAP"
+  EXECUTABLE_SHORT_NAME              = "XXCUST_AP_PDF_EXE"
+  EXECUTABLE_APPLICATION_SHORT_NAME  = "SQLAP"
+  USER_CONCURRENT_PROGRAM_NAME       = "XX AP PDF Import - KSeF OpenText"
+  DESCRIPTION                        = "Reads a KSeF PDF from the AP_PDF_DIR OS directory, stores it as a BLOB in XXCUST_AP_PDF_STAGING, then attaches it to the specified AP Invoice Header using the From Supplier document category."
+  ENABLED_FLAG                       = "Y"
+  PRINT_FLAG                         = "N"
+  RUN_ALONE_FLAG                     = "N"
+  RESTART_FLAG                       = "Y"
+  NLS_COMPLIANT                      = "Y"
+  QUEUE_METHOD_CODE                  = "B"
+  OUTPUT_FILE_TYPE                   = "TEXT"
+  REQUEST_TYPE                       = ""
+  MIN_SLAVES                         = 0
+  MAX_SLAVES                         = 1
+  LANGUAGE                           = "US"
+  SOURCE_LANG                        = "US"
+
+  # -------------------------------------------------------------------------
+  # Parameter 1: PDF File Name
+  #   Maps to PROCESS_PDF_CP argument position 1 (after errbuf/retcode).
+  #   ARGUMENT1 is the first user-visible parameter in the SRS form.
+  # -------------------------------------------------------------------------
+  BEGIN PARAMETER "P_FILE_NAME"
+    OWNER                          = "ORACLE"
+    LAST_UPDATE_DATE               = "2026/06/12"
+    SEQUENCE                       = 10
+    APPLICATION_COLUMN_NAME        = "ARGUMENT1"
+    ENABLED                        = "Y"
+    DISPLAY                        = "Y"
+    REQUIRED                       = "Y"
+    PROMPT                         = "PDF File Name (K-Sef Number.pdf)"
+    END_USER_COLUMN_NAME           = "P_FILE_NAME"
+    DESCRIPTION                    = "Full PDF file name. The stem (without .pdf) must be exactly 35 digits (K-Sef number). File must exist in the AP_PDF_DIR OS directory. Example: 12345678901234567890123456789012345.pdf"
+    DEFAULT_TYPE                   = ""
+    DEFAULT_VALUE                  = ""
+    DISPLAY_SIZE                   = 60
+    MAXIMUM_SIZE                   = 255
+    VALIDATION_TYPE                = "N"
+    FLEX_VALUE_SET_NAME            = ""
+    VALUE_SET_APPLICATION_SHORT_NAME = ""
+  END PARAMETER
+
+  # -------------------------------------------------------------------------
+  # Parameter 2: AP Invoice Number
+  #   Maps to PROCESS_PDF_CP argument position 2.
+  # -------------------------------------------------------------------------
+  BEGIN PARAMETER "P_INVOICE_NUM"
+    OWNER                          = "ORACLE"
+    LAST_UPDATE_DATE               = "2026/06/12"
+    SEQUENCE                       = 20
+    APPLICATION_COLUMN_NAME        = "ARGUMENT2"
+    ENABLED                        = "Y"
+    DISPLAY                        = "Y"
+    REQUIRED                       = "Y"
+    PROMPT                         = "AP Invoice Number"
+    END_USER_COLUMN_NAME           = "P_INVOICE_NUM"
+    DESCRIPTION                    = "Invoice number exactly as it appears in Oracle Payables (AP_INVOICES_ALL.INVOICE_NUM). Invoice must already exist in EBS."
+    DEFAULT_TYPE                   = ""
+    DEFAULT_VALUE                  = ""
+    DISPLAY_SIZE                   = 50
+    MAXIMUM_SIZE                   = 50
+    VALIDATION_TYPE                = "N"
+    FLEX_VALUE_SET_NAME            = ""
+    VALUE_SET_APPLICATION_SHORT_NAME = ""
+  END PARAMETER
+
+END CONCURRENT_PROGRAM

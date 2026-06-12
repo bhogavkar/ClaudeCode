@@ -94,6 +94,31 @@ AS
         x_message       OUT VARCHAR2
     );
 
+    /*
+     * PROCEDURE: process_pdf_cp
+     * -----------------------------------------------------------------------
+     * Concurrent Program entry point. Wraps process_pdf with the mandatory
+     * Oracle EBS CP framework signature (ERRBUF + RETCODE as first two OUT
+     * parameters). This is the procedure registered in the CP executable.
+     *
+     * RETCODE mapping:
+     *   '0' = Success  (status = ATTACHED)
+     *   '1' = Warning  (status = ATTACH_ERROR — BLOB loaded but FND step failed)
+     *   '2' = Error    (status = ERROR — load phase failed or unhandled exception)
+     *
+     * Parameters:
+     *   errbuf        - OUT: Error/completion message (Oracle CP requirement).
+     *   retcode       - OUT: Completion code '0'|'1'|'2' (Oracle CP requirement).
+     *   p_file_name   - IN:  PDF file name (K-Sef number + .pdf extension).
+     *   p_invoice_num - IN:  AP invoice number to attach to.
+     */
+    PROCEDURE process_pdf_cp(
+        errbuf        OUT VARCHAR2,
+        retcode       OUT VARCHAR2,
+        p_file_name   IN  VARCHAR2,
+        p_invoice_num IN  VARCHAR2
+    );
+
 END XXCUST_AP_PDF_PKG;
 /
 
