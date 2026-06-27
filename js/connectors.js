@@ -123,5 +123,24 @@
     return best;
   }
 
-  DD.connectors = { routePath, resolveEndpoint, toWorld, arrowHead, ARROWS, nearestPort };
+  /* ---------------------------------------------- connector / arrow presets
+     These power the draggable "Connectors & Arrows" palette section. Each
+     preset becomes a new connector when dropped onto the canvas. */
+  const PRESETS = [
+    { id: "arrow", label: "Arrow", arrowStart: "none", arrowEnd: "filled", routing: "orthogonal" },
+    { id: "line", label: "Line", arrowStart: "none", arrowEnd: "none", routing: "orthogonal" },
+    { id: "bi", label: "Bi-directional", arrowStart: "filled", arrowEnd: "filled", routing: "orthogonal" },
+    { id: "open", label: "Open arrow", arrowStart: "none", arrowEnd: "open", routing: "orthogonal" },
+    { id: "dashed", label: "Dashed arrow", arrowStart: "none", arrowEnd: "filled", routing: "orthogonal", style: { strokeStyle: "dashed" } },
+    { id: "dotted", label: "Dotted line", arrowStart: "none", arrowEnd: "none", routing: "orthogonal", style: { strokeStyle: "dotted" } },
+    { id: "curved", label: "Curved arrow", arrowStart: "none", arrowEnd: "filled", routing: "curved" },
+    { id: "straight", label: "Straight arrow", arrowStart: "none", arrowEnd: "filled", routing: "straight" },
+    { id: "inherit", label: "Inheritance", arrowStart: "none", arrowEnd: "triangle", routing: "straight" },
+    { id: "compose", label: "Composition", arrowStart: "diamond", arrowEnd: "filled", routing: "straight" },
+    { id: "erd", label: "One-to-many", arrowStart: "one", arrowEnd: "many", routing: "orthogonal" },
+    { id: "animated", label: "Animated flow", arrowStart: "none", arrowEnd: "filled", routing: "orthogonal", style: { animated: true, stroke: "#1f6feb" } },
+  ];
+  const preset = (id) => PRESETS.find((p) => p.id === id) || PRESETS[0];
+
+  DD.connectors = { routePath, resolveEndpoint, toWorld, arrowHead, ARROWS, nearestPort, PRESETS, preset };
 })();

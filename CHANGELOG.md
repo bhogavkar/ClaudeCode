@@ -42,6 +42,29 @@ project adheres to [Semantic Versioning](https://semver.org/).
   runs directly from `file://` with no build step (browsers block ES-module imports
   over `file://`).
 
+## [1.0.2] — 2026-06-27
+
+### Added
+- **Connectors & Arrows palette** — a dedicated sidebar section with 12 draggable
+  arrow/line presets (arrow, line, bi-directional, open, dashed, dotted, curved,
+  straight, UML inheritance/composition, ERD one-to-many, animated flow). Drag one
+  onto the canvas to create a connector, or drop it on a shape to anchor one end.
+- **Interactive connector endpoints** — selecting a connector now shows draggable
+  endpoint handles; drag an end onto any shape and it snaps to the nearest
+  connection port (handle turns green when attached) and re-routes live.
+
+### Fixed
+- Connector target detection now uses geometry (`_shapeAt`) instead of the DOM
+  event target, so dragging reliably snaps onto shapes/ports under the cursor.
+
+## [1.0.1] — 2026-06-27
+
+### Fixed
+- Pointer/mouse interactions were blocked by the hidden modal overlay (its CSS
+  `display:flex` overrode the `hidden` attribute). Added a global
+  `[hidden] { display: none !important; }` so every overlay truly hides and the
+  canvas receives clicks/drags.
+
 ## [Unreleased]
 - Multi-page documents, viewport virtualization for 10k+ nodes, real-time
   collaboration, AI-assisted generation, expanded cloud stencil packs, `.vsdx` and

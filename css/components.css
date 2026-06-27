@@ -120,6 +120,9 @@ input[type="range"].input { padding: 0; }
 .port { fill: var(--accent); stroke: #fff; stroke-width: 1.2; opacity: 0; cursor: crosshair; transition: opacity var(--dur-fast); vector-effect: non-scaling-stroke; }
 .shape-group:hover .port, .ports-visible .port { opacity: .85; }
 .port:hover { opacity: 1; r: 6; }
+.conn-handle { fill: var(--handle); stroke: var(--handle-border); stroke-width: 2; cursor: grab; vector-effect: non-scaling-stroke; }
+.conn-handle:hover { fill: var(--accent); }
+.conn-handle.is-attached { fill: var(--success); stroke: var(--success); }
 .marquee { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
 .guide-line { stroke: var(--danger); stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 

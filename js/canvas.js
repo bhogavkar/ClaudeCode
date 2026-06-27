@@ -274,10 +274,15 @@
         og.appendChild(svg("circle", { class: "rotate-handle", cx: s.w / 2, cy: -22 / this.scale, r: hs * 1.1, "data-handle": "rotate" }));
         this.gOverlay.appendChild(og);
       });
-      // connector selection highlight
+      // connector selection highlight + draggable endpoint handles
+      const ch = 6 / this.scale;
       store.selectedConnectors().forEach((c) => {
         const r = DD.connectors.routePath(c);
-        this.gOverlay.appendChild(svg("path", { d: r.d, fill: "none", stroke: "var(--selection)", "stroke-width": (c.style.strokeWidth || 2) + 3, opacity: 0.35 }));
+        this.gOverlay.appendChild(svg("path", { d: r.d, fill: "none", stroke: "var(--selection)", "stroke-width": (c.style.strokeWidth || 2) + 3, opacity: 0.3 }));
+        [["from", r.a], ["to", r.b]].forEach(([end, pt]) => {
+          const attached = c[end] && c[end].shapeId;
+          this.gOverlay.appendChild(svg("circle", { class: "conn-handle" + (attached ? " is-attached" : ""), cx: pt.x, cy: pt.y, r: ch, "data-connend": end, "data-id": c.id }));
+        });
       });
     }
     updateOverlayScale() {
@@ -320,8 +325,22 @@
     _clearGuides() { this.gOverlay.querySelectorAll(".guide-line").forEach((g) => g.remove()); }
 
     /* =============================================== hit testing */
+    /** Topmost visible shape whose bounding box contains a world point.
+     *  Geometry-based (not DOM target) so it stays reliable while dragging. */
+    _shapeAt(wx, wy, excludeId) {
+      const shapes = store.visibleShapes();
+      for (let i = shapes.length - 1; i >= 0; i--) {
+        const s = shapes[i];
+        if (s.id === excludeId) continue;
+        if (DD.util.pointInRect(wx, wy, DD.util.bbox(s))) return s;
+      }
+      return null;
+    }
+
     _hit(e) {
       const t = e.target;
+      const ce = t.closest && t.closest("[data-connend]");
+      if (ce) return { kind: "connend", id: ce.dataset.id, end: ce.dataset.connend };
       const portEl = t.closest && t.closest(".port");
       if (portEl) return { kind: "port", id: portEl.dataset.id, port: portEl.dataset.port };
       const handle = t.closest && t.closest("[data-handle]");
@@ -366,6 +385,7 @@
       if (this.tool === "connector") {
         if (hit.kind === "port" || hit.kind === "shape") return this._startConnector(hit, w);
       }
+      if (hit.kind === "connend") return this._startConnEnd(hit);
       if (hit.kind === "port") return this._startConnector(hit, w);
       if (hit.kind === "handle") return this._startHandle(hit, w, e);
 
@@ -394,6 +414,27 @@
       this.mode = hit.handle === "rotate" ? "rotating" : "resizing";
       this._drag = { id: hit.id, handle: hit.handle, orig: { x: s.x, y: s.y, w: s.w, h: s.h, rotation: s.rotation || 0 }, cx: s.x + s.w / 2, cy: s.y + s.h / 2, keep: e.shiftKey };
     }
+    _startConnEnd(hit) {
+      if (!store.isSelected(hit.id)) store.select(hit.id);
+      this.mode = "connend";
+      this._drag = { id: hit.id, end: hit.end };
+      this.svgEl.classList.add("ports-visible");
+    }
+    _doConnEnd(e, w) {
+      const c = store.getConnector(this._drag.id); if (!c) return;
+      const other = this._drag.end === "from" ? c.to : c.from;
+      const otherShape = other && other.shapeId;
+      const s = this._shapeAt(w.x, w.y);
+      let ep;
+      if (s) { const p = DD.connectors.nearestPort(s, w.x, w.y); ep = { shapeId: s.id, port: p.port }; }
+      else ep = { x: this.snap(w.x), y: this.snap(w.y), side: "w" };
+      // avoid linking a shape to itself only if both ends would collapse; allowed otherwise
+      void otherShape;
+      c[this._drag.end] = ep;
+      this.refreshObject(c.id);
+      this._drag.moved = true;
+    }
+
     _startConnector(hit, w) {
       this.mode = "connecting";
       let from;
@@ -416,6 +457,7 @@
       if (this.mode === "resizing") return this._doResize(w);
       if (this.mode === "rotating") return this._doRotate(w);
       if (this.mode === "marquee") return this._doMarquee(w);
+      if (this.mode === "connend") return this._doConnEnd(e, w);
       if (this.mode === "connecting") return this._doConnecting(e, w);
     }
 
@@ -466,17 +508,9 @@
     }
 
     _doConnecting(e, w) {
-      const from = DD.connectors.resolveEndpoint(this._drag.from);
-      const hit = this._hit(e);
-      let to = { x: w.x, y: w.y, side: "w" };
       this._drag.target = null;
-      if (hit.kind === "shape" && hit.id !== this._drag.from.shapeId) {
-        const s = store.getShape(hit.id); const p = DD.connectors.nearestPort(s, w.x, w.y);
-        to = p; this._drag.target = { shapeId: hit.id, port: p.port };
-      } else if (hit.kind === "port" && hit.id !== this._drag.from.shapeId) {
-        const s = store.getShape(hit.id); to = DD.connectors.toWorld(s, DD.shapes.ports(s).find((x) => x.id === hit.port));
-        this._drag.target = { shapeId: hit.id, port: hit.port };
-      }
+      const s = this._shapeAt(w.x, w.y, this._drag.from.shapeId);
+      if (s) { const p = DD.connectors.nearestPort(s, w.x, w.y); this._drag.target = { shapeId: s.id, port: p.port }; }
       const fake = { from: this._drag.from, to: this._drag.target || { x: w.x, y: w.y, side: "w" }, routing: "orthogonal" };
       this._tempConn.setAttribute("d", DD.connectors.routePath(fake).d);
     }
@@ -485,6 +519,11 @@
       if (this.mode === "panning") { this.svgEl.style.cursor = this._spaceDown ? "grab" : ""; }
       else if (this.mode === "moving" && this._drag.moved) { this._clearGuides(); DD.history._commit("Move"); store.markDirty(); }
       else if ((this.mode === "resizing" || this.mode === "rotating") && this._drag.moved) { DD.history._commit(this.mode === "resizing" ? "Resize" : "Rotate"); store.markDirty(); }
+      else if (this.mode === "connend") {
+        this.svgEl.classList.remove("ports-visible");
+        if (this._drag.moved) { DD.history._commit("Edit connector"); store.markDirty(); }
+        this.renderOverlay();
+      }
       else if (this.mode === "marquee") {
         if (this._marqueeBox && (this._marqueeBox.w > 3 || this._marqueeBox.h > 3)) {
           const ids = store.visibleShapes().filter((s) => U.rectsIntersect(this._marqueeBox, U.bbox(s))).map((s) => s.id);
@@ -551,6 +590,25 @@
 
     _drop(e) {
       e.preventDefault(); this.host.classList.remove("drag-over");
+      const w0 = this.screenToWorld(e.clientX, e.clientY);
+
+      // Dropping an arrow/connector preset → create an interactive connector.
+      const presetId = e.dataTransfer.getData("text/connector-preset");
+      if (presetId) {
+        const def = DD.connectors.preset(presetId);
+        const s = this._shapeAt(w0.x, w0.y);
+        let from, to;
+        if (s) { const p = DD.connectors.nearestPort(s, w0.x, w0.y); from = { shapeId: s.id, port: p.port }; to = { x: this.snap(p.x + 150), y: this.snap(p.y), side: "w" }; }
+        else { from = { x: this.snap(w0.x - 70), y: this.snap(w0.y), side: "e" }; to = { x: this.snap(w0.x + 70), y: this.snap(w0.y), side: "w" }; }
+        DD.history.transaction("Add " + def.label, () => {
+          const c = store.addConnector({ from, to, routing: def.routing || "orthogonal", arrowStart: def.arrowStart || "none", arrowEnd: def.arrowEnd || "filled", style: Object.assign({}, def.style) });
+          store.select(c.id);
+        });
+        this.refreshObject([...store.selection][0]);
+        DD.util.toast("Drag the endpoints onto shapes to connect");
+        return;
+      }
+
       const type = e.dataTransfer.getData("text/shape-type");
       if (!type || !DD.shapes.has(type)) return;
       const w = this.screenToWorld(e.clientX, e.clientY);
