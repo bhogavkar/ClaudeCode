@@ -42,6 +42,11 @@ AS
    *                                       group, with expatriate employee
    *                                       handling (reject when more than one
    *                                       active person id resolves).
+   * 1.2     27-JUN-2026 <Author>          Distinguish expatriate person ids
+   *                                       that share an employee number by the
+   *                                       active (ACTIVE_ASSIGN) primary
+   *                                       assignment; reject if more than one
+   *                                       active person id remains.
    *************************************************************************/
 
    ----------------------------------------------------------------------------
@@ -307,11 +312,13 @@ AS
     *
     * NOTE
     *  The employee number alone is not unique for expatriate employees, who
-    *  may hold person records in more than one business group. The operating
-    *  unit business group (derived from p_org_id) scopes the lookup, the
-    *  active period of service ensures only a current employee is taken and
-    *  the latest dated record is returned. If more than one active person id
-    *  still resolves the record is rejected rather than guessed.
+    *  may hold separate person records (person ids) for the same number. The
+    *  operating unit business group (derived from p_org_id) scopes the lookup
+    *  and only the active primary assignment (per_system_status =
+    *  'ACTIVE_ASSIGN') is considered, so a suspended home assignment is
+    *  ignored even though its primary_flag is still 'Y'. The latest dated
+    *  record is returned. If more than one active person id still resolves
+    *  the record is rejected rather than guessed.
     *
     * CALLED BY
     *  validate_staging_records, export_expense_report_to_ap
@@ -329,24 +336,30 @@ AS
    BEGIN
       ----------------------------------------------------------------
       -- Count the distinct active persons for this employee number
-      -- within the operating unit business group. This isolates a
-      -- single active person and traps expatriate employees who may be
-      -- set up in more than one business group.
+      -- within the operating unit business group, considering only the
+      -- active primary assignment (ACTIVE_ASSIGN). A suspended home
+      -- assignment of an expatriate is ignored even though its
+      -- primary_flag is 'Y', isolating a single active person id.
       ----------------------------------------------------------------
       BEGIN
          SELECT COUNT (DISTINCT papf.person_id)
            INTO l_match_count
-           FROM per_all_people_f         papf,
-                per_periods_of_service   ppos,
-                hr_operating_units       hou
+           FROM per_all_people_f             papf,
+                per_all_assignments_f        paaf,
+                per_assignment_status_types  past,
+                hr_operating_units           hou
           WHERE papf.employee_number = p_employee_number
             AND hou.organization_id = p_org_id
             AND papf.business_group_id = hou.business_group_id
             AND papf.current_employee_flag = 'Y'
             AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
-            AND ppos.person_id = papf.person_id
-            AND ppos.business_group_id = papf.business_group_id
-            AND TRUNC (SYSDATE) <= TRUNC (NVL (ppos.final_process_date, SYSDATE));
+            AND paaf.person_id = papf.person_id
+            AND paaf.business_group_id = papf.business_group_id
+            AND paaf.primary_flag = 'Y'
+            AND paaf.assignment_type = 'E'
+            AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date AND paaf.effective_end_date
+            AND past.assignment_status_type_id = paaf.assignment_status_type_id
+            AND past.per_system_status = 'ACTIVE_ASSIGN';
       EXCEPTION
          WHEN OTHERS THEN
             l_match_count := -1;
@@ -373,17 +386,22 @@ AS
            FROM (SELECT papf.person_id,
                         papf.full_name,
                         ROW_NUMBER () OVER (ORDER BY papf.effective_start_date DESC) rn
-                   FROM per_all_people_f         papf,
-                        per_periods_of_service   ppos,
-                        hr_operating_units       hou
+                   FROM per_all_people_f             papf,
+                        per_all_assignments_f        paaf,
+                        per_assignment_status_types  past,
+                        hr_operating_units           hou
                   WHERE papf.employee_number = p_employee_number
                     AND hou.organization_id = p_org_id
                     AND papf.business_group_id = hou.business_group_id
                     AND papf.current_employee_flag = 'Y'
                     AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
-                    AND ppos.person_id = papf.person_id
-                    AND ppos.business_group_id = papf.business_group_id
-                    AND TRUNC (SYSDATE) <= TRUNC (NVL (ppos.final_process_date, SYSDATE)))
+                    AND paaf.person_id = papf.person_id
+                    AND paaf.business_group_id = papf.business_group_id
+                    AND paaf.primary_flag = 'Y'
+                    AND paaf.assignment_type = 'E'
+                    AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date AND paaf.effective_end_date
+                    AND past.assignment_status_type_id = paaf.assignment_status_type_id
+                    AND past.per_system_status = 'ACTIVE_ASSIGN')
           WHERE rn = 1;
       EXCEPTION
          WHEN NO_DATA_FOUND THEN
