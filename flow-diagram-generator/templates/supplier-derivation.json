@@ -1,0 +1,1022 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Employee Supplier Derivation & Creation",
+    "subtitle": "TJX WorkDay Expense Report · Pre-Import Derivation · pattern follows AP_WEB_EXPORT_ER",
+    "cornerText": "",
+    "cornerSub": "",
+    "footer": "TJX WorkDay Expense Report · Pre-Import Derivation · pattern follows AP_WEB_EXPORT_ER",
+    "theme": "light",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "modifiedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "canvas": {
+    "width": 1320,
+    "height": 2240,
+    "grid": {
+      "show": true,
+      "size": 16,
+      "snap": true
+    },
+    "background": "#ffffff"
+  },
+  "lanes": [],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "s_start",
+      "type": "start",
+      "shape": "terminator",
+      "x": 270,
+      "y": 120,
+      "w": 430,
+      "h": 58,
+      "rotation": 0,
+      "title": "START · Employee Number + Operating Unit (Workday)",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#1c7ed6",
+        "width": 5
+      },
+      "fill": "#1c7ed6",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 14,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_derive",
+      "type": "orchestration",
+      "shape": "roundrect",
+      "x": 270,
+      "y": 230,
+      "w": 430,
+      "h": 120,
+      "rotation": 0,
+      "title": "Derive PERSON_ID from Employee Number",
+      "body": "Query PER_ALL_PEOPLE_F for the active person:\nget PERSON_ID, PARTY_ID, FULL_NAME\n( employee_number = file value, scoped by OU )",
+      "monospaceBody": true,
+      "icon": "",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_dec1",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 355,
+      "y": 400,
+      "w": 260,
+      "h": 130,
+      "rotation": 0,
+      "title": "Employee found and active?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_rej1",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 900,
+      "y": 415,
+      "w": 340,
+      "h": 120,
+      "rotation": 0,
+      "title": "Reject row\nWD_EMP_NOT_FOUND / WD_EMP_INACTIVE",
+      "body": "updates staging row with reason",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#e03131",
+        "width": 5
+      },
+      "fill": "#fff5f5",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_find1",
+      "type": "orchestration",
+      "shape": "roundrect",
+      "x": 270,
+      "y": 590,
+      "w": 430,
+      "h": 120,
+      "rotation": 0,
+      "title": "Find existing employee supplier",
+      "body": "AP_SUPPLIERS where EMPLOYEE_ID = PERSON_ID\nand VENDOR_TYPE_LOOKUP_CODE = 'EMPLOYEE'\n(returns VENDOR_ID, PARTY_ID)",
+      "monospaceBody": true,
+      "icon": "",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_dec2",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 355,
+      "y": 760,
+      "w": 260,
+      "h": 130,
+      "rotation": 0,
+      "title": "Supplier exists?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_rej2",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 900,
+      "y": 640,
+      "w": 340,
+      "h": 120,
+      "rotation": 0,
+      "title": "Reject row\nWD_SUPP_DUP (>1 supplier found)",
+      "body": "updates staging row with reason",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#e03131",
+        "width": 5
+      },
+      "fill": "#fff5f5",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_dec3",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 340,
+      "y": 960,
+      "w": 290,
+      "h": 150,
+      "rotation": 0,
+      "title": "Create Employee as Supplier = Y and numbering = AUTOMATIC?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 12,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_rej3",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 900,
+      "y": 985,
+      "w": 340,
+      "h": 120,
+      "rotation": 0,
+      "title": "Reject row\nWD_SUPP_CREATE (create not enabled)",
+      "body": "updates staging row with reason",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#e03131",
+        "width": 5
+      },
+      "fill": "#fff5f5",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_api1",
+      "type": "api",
+      "shape": "roundrect",
+      "x": 250,
+      "y": 1160,
+      "w": 470,
+      "h": 120,
+      "rotation": 0,
+      "title": "AP_VENDOR_PUB_PKG.create_vendor",
+      "body": "VENDOR_TYPE='EMPLOYEE', EMPLOYEE_ID=PERSON_ID,\nVENDOR_NAME=FULL_NAME; terms & pay group from\nAP_SYSTEM_PARAMETERS → returns VENDOR_ID, PARTY_ID",
+      "monospaceBody": true,
+      "icon": "",
+      "iconColor": "#7048e8",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#7048e8",
+        "width": 5
+      },
+      "fill": "#f3f0ff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_find2",
+      "type": "datastore",
+      "shape": "rect",
+      "x": 270,
+      "y": 1340,
+      "w": 430,
+      "h": 120,
+      "rotation": 0,
+      "title": "Find HOME pay site for the OU",
+      "body": "AP_SUPPLIER_SITES_ALL where VENDOR_ID and\nORG_ID = OU, site = HOME, active\n(returns VENDOR_SITE_ID, PARTY_SITE_ID)",
+      "monospaceBody": true,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_dec4",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 355,
+      "y": 1510,
+      "w": 260,
+      "h": 130,
+      "rotation": 0,
+      "title": "HOME site exists?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_api2",
+      "type": "api",
+      "shape": "roundrect",
+      "x": 250,
+      "y": 1710,
+      "w": 470,
+      "h": 120,
+      "rotation": 0,
+      "title": "AP_VENDOR_PUB_PKG.create_vendor_site",
+      "body": "VENDOR_SITE_CODE='HOME', PAY_SITE_FLAG='Y',\nORG_ID = OU, currency USD\n→ returns VENDOR_SITE_ID",
+      "monospaceBody": true,
+      "icon": "",
+      "iconColor": "#7048e8",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#7048e8",
+        "width": 5
+      },
+      "fill": "#f3f0ff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_rej4",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 900,
+      "y": 1720,
+      "w": 340,
+      "h": 120,
+      "rotation": 0,
+      "title": "Reject row\nWD_SITE_CREATE (API error)",
+      "body": "updates staging row with reason",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#e03131",
+        "width": 5
+      },
+      "fill": "#fff5f5",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_upd",
+      "type": "datastore",
+      "shape": "rect",
+      "x": 270,
+      "y": 1890,
+      "w": 430,
+      "h": 110,
+      "rotation": 0,
+      "title": "Update staging",
+      "body": "Write VENDOR_ID, VENDOR_SITE_ID and PARTY_ID\nback to header & line staging rows",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_end",
+      "type": "end",
+      "shape": "terminator",
+      "x": 270,
+      "y": 2050,
+      "w": 430,
+      "h": 58,
+      "rotation": 0,
+      "title": "END · Ready for Preprocessor and open-interface load",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#2f9e44",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 14,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "s_note",
+      "type": "note",
+      "shape": "note",
+      "x": 840,
+      "y": 1880,
+      "w": 400,
+      "h": 230,
+      "rotation": 0,
+      "title": "Transaction safety",
+      "body": "All derive/create work is guarded by a single SAVEPOINT sp_emp_create. On any reject the row is rolled back to the savepoint and marked in error — the function never raises, so the other expense reports in the run keep processing.",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#c92a2a",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_t1",
+      "from": {
+        "nodeId": "s_start",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_derive",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t2",
+      "from": {
+        "nodeId": "s_derive",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_dec1",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t3",
+      "from": {
+        "nodeId": "s_dec1",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "s_rej1",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t4",
+      "from": {
+        "nodeId": "s_dec1",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_find1",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t5",
+      "from": {
+        "nodeId": "s_find1",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_dec2",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t6",
+      "from": {
+        "nodeId": "s_dec2",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "s_rej2",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Many",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t7",
+      "from": {
+        "nodeId": "s_dec2",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_dec3",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No (create)",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t8",
+      "from": {
+        "nodeId": "s_dec2",
+        "anchor": "w"
+      },
+      "to": {
+        "nodeId": "s_upd",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "dotted",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes (reuse)",
+      "labelPos": 0.05,
+      "preset": "success",
+      "waypoints": [
+        {
+          "x": 140,
+          "y": 825
+        },
+        {
+          "x": 140,
+          "y": 1945
+        }
+      ]
+    },
+    {
+      "id": "e_t9",
+      "from": {
+        "nodeId": "s_dec3",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "s_rej3",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t10",
+      "from": {
+        "nodeId": "s_dec3",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_api1",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t11",
+      "from": {
+        "nodeId": "s_api1",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_find2",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t12",
+      "from": {
+        "nodeId": "s_find2",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_dec4",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t13",
+      "from": {
+        "nodeId": "s_dec4",
+        "anchor": "w"
+      },
+      "to": {
+        "nodeId": "s_find2",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "dotted",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes (reuse)",
+      "labelPos": 0.1,
+      "preset": "success",
+      "waypoints": [
+        {
+          "x": 180,
+          "y": 1575
+        },
+        {
+          "x": 180,
+          "y": 1395
+        }
+      ]
+    },
+    {
+      "id": "e_t14",
+      "from": {
+        "nodeId": "s_dec4",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_api2",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t15",
+      "from": {
+        "nodeId": "s_api2",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "s_rej4",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "error",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t16",
+      "from": {
+        "nodeId": "s_api2",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_upd",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t17",
+      "from": {
+        "nodeId": "s_upd",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "s_end",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    }
+  ],
+  "legend": {
+    "show": true,
+    "mode": "auto",
+    "position": "bottom",
+    "items": []
+  }
+}

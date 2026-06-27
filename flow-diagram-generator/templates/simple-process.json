@@ -1,0 +1,299 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Simple Process",
+    "subtitle": "A clean linear flow",
+    "cornerText": "",
+    "cornerSub": "",
+    "footer": "",
+    "theme": "light",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "modifiedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "canvas": {
+    "width": 1200,
+    "height": 500,
+    "grid": {
+      "show": true,
+      "size": 16,
+      "snap": true
+    },
+    "background": "#ffffff"
+  },
+  "lanes": [],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "p1",
+      "type": "start",
+      "shape": "terminator",
+      "x": 60,
+      "y": 200,
+      "w": 180,
+      "h": 56,
+      "rotation": 0,
+      "title": "START",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#1c7ed6",
+        "width": 5
+      },
+      "fill": "#1c7ed6",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "p2",
+      "type": "process",
+      "shape": "rect",
+      "x": 300,
+      "y": 188,
+      "w": 200,
+      "h": 84,
+      "rotation": 0,
+      "title": "Step 1",
+      "body": "First action",
+      "monospaceBody": false,
+      "icon": "list",
+      "iconColor": "#5c6b7e",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "p3",
+      "type": "process",
+      "shape": "rect",
+      "x": 560,
+      "y": 188,
+      "w": 200,
+      "h": 84,
+      "rotation": 0,
+      "title": "Step 2",
+      "body": "Second action",
+      "monospaceBody": false,
+      "icon": "sync",
+      "iconColor": "#5c6b7e",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#1098ad",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "p4",
+      "type": "process",
+      "shape": "rect",
+      "x": 820,
+      "y": 188,
+      "w": 200,
+      "h": 84,
+      "rotation": 0,
+      "title": "Step 3",
+      "body": "Third action",
+      "monospaceBody": false,
+      "icon": "check",
+      "iconColor": "#5c6b7e",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#7048e8",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "p5",
+      "type": "end",
+      "shape": "terminator",
+      "x": 1060,
+      "y": 200,
+      "w": 120,
+      "h": 56,
+      "rotation": 0,
+      "title": "END",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#2f9e44",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_t1",
+      "from": {
+        "nodeId": "p1",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "p2",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t2",
+      "from": {
+        "nodeId": "p2",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "p3",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t3",
+      "from": {
+        "nodeId": "p3",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "p4",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t4",
+      "from": {
+        "nodeId": "p4",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "p5",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    }
+  ],
+  "legend": {
+    "show": true,
+    "mode": "auto",
+    "position": "bottom",
+    "items": []
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Swimlane Diagram",
+    "subtitle": "Add nodes to each lane",
+    "cornerText": "",
+    "cornerSub": "",
+    "footer": "",
+    "theme": "light",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "modifiedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "canvas": {
+    "width": 1300,
+    "height": 900,
+    "grid": {
+      "show": true,
+      "size": 16,
+      "snap": true
+    },
+    "background": "#ffffff"
+  },
+  "lanes": [
+    {
+      "id": "l1",
+      "orientation": "vertical",
+      "label": "Lane 1",
+      "subLabel": "",
+      "color": "#1f2a3d",
+      "swatch": "#4263eb",
+      "tint": "#fbfcfe",
+      "x": 40,
+      "y": 110,
+      "w": 380,
+      "h": 720,
+      "order": 0
+    },
+    {
+      "id": "l2",
+      "orientation": "vertical",
+      "label": "Lane 2",
+      "subLabel": "",
+      "color": "#1f2a3d",
+      "swatch": "#2f9e44",
+      "tint": "#fbfcfe",
+      "x": 440,
+      "y": 110,
+      "w": 380,
+      "h": 720,
+      "order": 1
+    },
+    {
+      "id": "l3",
+      "orientation": "vertical",
+      "label": "Lane 3",
+      "subLabel": "",
+      "color": "#1f2a3d",
+      "swatch": "#7048e8",
+      "tint": "#fbfcfe",
+      "x": 840,
+      "y": 110,
+      "w": 380,
+      "h": 720,
+      "order": 2
+    }
+  ],
+  "groups": [],
+  "nodes": [],
+  "edges": [],
+  "legend": {
+    "show": true,
+    "mode": "auto",
+    "position": "bottom",
+    "items": []
+  }
+}

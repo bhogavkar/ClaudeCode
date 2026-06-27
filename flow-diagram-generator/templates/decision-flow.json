@@ -1,0 +1,356 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Decision Flow",
+    "subtitle": "Start → process → decision",
+    "cornerText": "",
+    "cornerSub": "",
+    "footer": "",
+    "theme": "light",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "modifiedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "canvas": {
+    "width": 1100,
+    "height": 900,
+    "grid": {
+      "show": true,
+      "size": 16,
+      "snap": true
+    },
+    "background": "#ffffff"
+  },
+  "lanes": [],
+  "groups": [],
+  "nodes": [
+    {
+      "id": "d1",
+      "type": "start",
+      "shape": "terminator",
+      "x": 360,
+      "y": 120,
+      "w": 240,
+      "h": 56,
+      "rotation": 0,
+      "title": "START",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#1c7ed6",
+        "width": 5
+      },
+      "fill": "#1c7ed6",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "d2",
+      "type": "process",
+      "shape": "rect",
+      "x": 360,
+      "y": 230,
+      "w": 240,
+      "h": 90,
+      "rotation": 0,
+      "title": "Process step",
+      "body": "Do the work",
+      "monospaceBody": false,
+      "icon": "gear",
+      "iconColor": "#5c6b7e",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "d3",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 380,
+      "y": 380,
+      "w": 200,
+      "h": 120,
+      "rotation": 0,
+      "title": "Condition met?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "d4",
+      "type": "process",
+      "shape": "rect",
+      "x": 360,
+      "y": 560,
+      "w": 240,
+      "h": 90,
+      "rotation": 0,
+      "title": "Yes path",
+      "body": "Continue",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#5c6b7e",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "d5",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 720,
+      "y": 400,
+      "w": 240,
+      "h": 90,
+      "rotation": 0,
+      "title": "No path",
+      "body": "Handle exception",
+      "monospaceBody": false,
+      "icon": "warning",
+      "iconColor": "#e03131",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#e03131",
+        "width": 5
+      },
+      "fill": "#fff5f5",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    },
+    {
+      "id": "d6",
+      "type": "end",
+      "shape": "terminator",
+      "x": 360,
+      "y": 700,
+      "w": 240,
+      "h": 56,
+      "rotation": 0,
+      "title": "END",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#2f9e44",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#ffffff",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": null,
+      "groupId": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_t1",
+      "from": {
+        "nodeId": "d1",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "d2",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t2",
+      "from": {
+        "nodeId": "d2",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "d3",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t3",
+      "from": {
+        "nodeId": "d3",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "d5",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t4",
+      "from": {
+        "nodeId": "d3",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "d4",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t5",
+      "from": {
+        "nodeId": "d4",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "d6",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    }
+  ],
+  "legend": {
+    "show": true,
+    "mode": "auto",
+    "position": "bottom",
+    "items": []
+  }
+}

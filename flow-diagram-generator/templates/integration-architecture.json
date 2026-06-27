@@ -1,0 +1,993 @@
+{
+  "version": "1.0",
+  "meta": {
+    "title": "Integration Architecture",
+    "subtitle": "Workday Expense Report Import → Oracle E-Business Suite · Accounts Payable (R12.2.12)",
+    "cornerText": "The TJX Companies, Inc.",
+    "cornerSub": "Confidential",
+    "footer": "Workday Expense Report Import → Oracle E-Business Suite · Accounts Payable (R12.2.12)",
+    "theme": "light",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "modifiedAt": "2026-01-01T00:00:00.000Z"
+  },
+  "canvas": {
+    "width": 1960,
+    "height": 1320,
+    "grid": {
+      "show": true,
+      "size": 16,
+      "snap": true
+    },
+    "background": "#ffffff"
+  },
+  "lanes": [
+    {
+      "id": "lane_cm",
+      "orientation": "vertical",
+      "label": "Control-M",
+      "subLabel": "",
+      "icon": "",
+      "color": "#1f2a3d",
+      "swatch": "#7048e8",
+      "tint": "#fbfcfe",
+      "x": 24,
+      "y": 110,
+      "w": 250,
+      "h": 1140,
+      "order": 0
+    },
+    {
+      "id": "lane_ebs",
+      "orientation": "vertical",
+      "label": "Oracle E-Business Suite",
+      "subLabel": "Application & database tier",
+      "icon": "",
+      "color": "#1f2a3d",
+      "swatch": "#4263eb",
+      "tint": "#fbfcfe",
+      "x": 286,
+      "y": 110,
+      "w": 1330,
+      "h": 1140,
+      "order": 1
+    },
+    {
+      "id": "lane_bu",
+      "orientation": "vertical",
+      "label": "Business Users",
+      "subLabel": "",
+      "icon": "",
+      "color": "#1f2a3d",
+      "swatch": "#7048e8",
+      "tint": "#fbfcfe",
+      "x": 1628,
+      "y": 110,
+      "w": 300,
+      "h": 1140,
+      "order": 2
+    }
+  ],
+  "groups": [
+    {
+      "id": "grp_pre",
+      "label": "Invoice import & validation (Preprocessor)",
+      "x": 300,
+      "y": 640,
+      "w": 1300,
+      "h": 560,
+      "style": "dashed",
+      "color": "#1c7ed6",
+      "fill": "rgba(28,126,214,0.04)"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n_job",
+      "type": "orchestration",
+      "shape": "roundrect",
+      "x": 44,
+      "y": 200,
+      "w": 200,
+      "h": 96,
+      "rotation": 0,
+      "title": "Control-M Job",
+      "body": "Scheduled trigger that invokes the Oracle concurrent Request Set",
+      "monospaceBody": false,
+      "icon": "clock",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_cm",
+      "groupId": null
+    },
+    {
+      "id": "n_rs",
+      "type": "concurrent",
+      "shape": "roundrect",
+      "x": 316,
+      "y": 200,
+      "w": 196,
+      "h": 96,
+      "rotation": 0,
+      "title": "Request Set",
+      "body": "TJX WorkDay Expense Report Import – Request Set",
+      "monospaceBody": false,
+      "icon": "list",
+      "iconColor": "#4263eb",
+      "badge": {
+        "show": true,
+        "value": "1",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_in1",
+      "type": "fileio",
+      "shape": "rect",
+      "x": 556,
+      "y": 200,
+      "w": 170,
+      "h": 96,
+      "rotation": 0,
+      "title": "Inbound 1",
+      "body": "File handling via MQ FTE",
+      "monospaceBody": false,
+      "icon": "download",
+      "iconColor": "#1098ad",
+      "badge": {
+        "show": true,
+        "value": "2",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#1098ad",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_in2",
+      "type": "fileio",
+      "shape": "rect",
+      "x": 760,
+      "y": 200,
+      "w": 170,
+      "h": 96,
+      "rotation": 0,
+      "title": "Inbound 2",
+      "body": "File handling for EBS",
+      "monospaceBody": false,
+      "icon": "download",
+      "iconColor": "#1098ad",
+      "badge": {
+        "show": true,
+        "value": "3",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#1098ad",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_cdl",
+      "type": "concurrent",
+      "shape": "roundrect",
+      "x": 980,
+      "y": 200,
+      "w": 210,
+      "h": 96,
+      "rotation": 0,
+      "title": "Common Data Loader",
+      "body": "Concurrent program – loads file into staging",
+      "monospaceBody": false,
+      "icon": "database",
+      "iconColor": "#4263eb",
+      "badge": {
+        "show": true,
+        "value": "4",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_da",
+      "type": "orchestration",
+      "shape": "roundrect",
+      "x": 1330,
+      "y": 200,
+      "w": 210,
+      "h": 96,
+      "rotation": 0,
+      "title": "Delete & Archive",
+      "body": "AP Standard Invoice Interface cleanup (on warning / error)",
+      "monospaceBody": false,
+      "icon": "archive",
+      "iconColor": "#1c7ed6",
+      "badge": {
+        "show": true,
+        "value": "6",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#1c7ed6",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_efile",
+      "type": "document",
+      "shape": "document",
+      "x": 336,
+      "y": 430,
+      "w": 200,
+      "h": 130,
+      "rotation": 0,
+      "title": "Expense data file",
+      "body": "(Oracle EBS Unix server)",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#1098ad",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#1098ad",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_stg",
+      "type": "datastore",
+      "shape": "cylinder",
+      "x": 1010,
+      "y": 430,
+      "w": 190,
+      "h": 130,
+      "rotation": 0,
+      "title": "Oracle Staging Table",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": true,
+        "value": "5",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": null
+    },
+    {
+      "id": "n_dv",
+      "type": "concurrent",
+      "shape": "roundrect",
+      "x": 330,
+      "y": 690,
+      "w": 300,
+      "h": 130,
+      "rotation": 0,
+      "title": "Derivation & Validation",
+      "body": "Find/create employee supplier (Oracle APIs), then validate invoice data – pre-import",
+      "monospaceBody": false,
+      "icon": "gear",
+      "iconColor": "#4263eb",
+      "badge": {
+        "show": true,
+        "value": "7",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_dec",
+      "type": "decision",
+      "shape": "diamond",
+      "x": 800,
+      "y": 700,
+      "w": 210,
+      "h": 120,
+      "rotation": 0,
+      "title": "Validation successful?",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9db",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_le",
+      "type": "reject",
+      "shape": "roundrect",
+      "x": 1120,
+      "y": 690,
+      "w": 260,
+      "h": 130,
+      "rotation": 0,
+      "title": "Log Error",
+      "body": "Mark record as error in staging table and log the error in the error table",
+      "monospaceBody": false,
+      "icon": "warning",
+      "iconColor": "#f59f00",
+      "badge": {
+        "show": true,
+        "value": "9",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#f59f00",
+        "width": 5
+      },
+      "fill": "#fff9f2",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_pay",
+      "type": "payables",
+      "shape": "cylinder",
+      "x": 470,
+      "y": 940,
+      "w": 190,
+      "h": 130,
+      "rotation": 0,
+      "title": "Oracle Payables",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#0ca678",
+      "badge": {
+        "show": true,
+        "value": "10",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#0ca678",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_oit",
+      "type": "datastore",
+      "shape": "cylinder",
+      "x": 820,
+      "y": 940,
+      "w": 190,
+      "h": 130,
+      "rotation": 0,
+      "title": "Open Interface Table",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "",
+      "iconColor": "#2f9e44",
+      "badge": {
+        "show": true,
+        "value": "8",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#2f9e44",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_post",
+      "type": "concurrent",
+      "shape": "roundrect",
+      "x": 740,
+      "y": 1110,
+      "w": 380,
+      "h": 120,
+      "rotation": 0,
+      "title": "Standard Invoice Import – Postprocessor",
+      "body": "Compiles reporting and logs for the entire EBS processing run (created invoices and rejections)",
+      "monospaceBody": false,
+      "icon": "barchart",
+      "iconColor": "#4263eb",
+      "badge": {
+        "show": true,
+        "value": "11",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#4263eb",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_ebs",
+      "groupId": "grp_pre"
+    },
+    {
+      "id": "n_card",
+      "type": "card",
+      "shape": "roundrect",
+      "x": 1660,
+      "y": 210,
+      "w": 236,
+      "h": 200,
+      "rotation": 0,
+      "title": "",
+      "body": "The TJX EP team coordinates and handles the rejected records in the Invoice Interface and the Preprocessor.",
+      "monospaceBody": false,
+      "icon": "info",
+      "iconColor": "#7048e8",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": true,
+        "color": "#7048e8",
+        "width": 5
+      },
+      "fill": "#f3f0ff",
+      "stroke": "#dbe2ea",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "left",
+      "shadow": true,
+      "laneId": "lane_bu",
+      "groupId": null
+    },
+    {
+      "id": "n_usr",
+      "type": "process",
+      "shape": "circle",
+      "x": 1738,
+      "y": 470,
+      "w": 80,
+      "h": 80,
+      "rotation": 0,
+      "title": "",
+      "body": "",
+      "monospaceBody": false,
+      "icon": "user",
+      "iconColor": "#7048e8",
+      "badge": {
+        "show": false,
+        "value": "",
+        "color": "#c92a2a"
+      },
+      "accent": {
+        "show": false,
+        "color": "#5c6b7e",
+        "width": 5
+      },
+      "fill": "#ffffff",
+      "stroke": "#7048e8",
+      "strokeWidth": 1.4,
+      "strokeStyle": "solid",
+      "radius": 12,
+      "textColor": "#1f2937",
+      "fontSize": 13,
+      "align": "center",
+      "shadow": false,
+      "laneId": "lane_bu",
+      "groupId": null
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_t1",
+      "from": {
+        "nodeId": "n_job",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_rs",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t2",
+      "from": {
+        "nodeId": "n_rs",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_in1",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t3",
+      "from": {
+        "nodeId": "n_in1",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_in2",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t4",
+      "from": {
+        "nodeId": "n_in2",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_cdl",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t5",
+      "from": {
+        "nodeId": "n_efile",
+        "anchor": "n"
+      },
+      "to": {
+        "nodeId": "n_in1",
+        "anchor": "s"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "expense data file",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t6",
+      "from": {
+        "nodeId": "n_cdl",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_da",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Warning / Error",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t7",
+      "from": {
+        "nodeId": "n_cdl",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "n_stg",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Success",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t8",
+      "from": {
+        "nodeId": "n_stg",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "n_dv",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t9",
+      "from": {
+        "nodeId": "n_dv",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_dec",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#5c6b7e",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "sequence",
+      "waypoints": []
+    },
+    {
+      "id": "e_t10",
+      "from": {
+        "nodeId": "n_dec",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_le",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#e03131",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "No",
+      "labelPos": 0.5,
+      "preset": "error",
+      "waypoints": []
+    },
+    {
+      "id": "e_t11",
+      "from": {
+        "nodeId": "n_dec",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "n_oit",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Yes",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t12",
+      "from": {
+        "nodeId": "n_pay",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_oit",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#37b24d",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "Invoice Import",
+      "labelPos": 0.5,
+      "preset": "success",
+      "waypoints": []
+    },
+    {
+      "id": "e_t13",
+      "from": {
+        "nodeId": "n_oit",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "n_post",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "dotted",
+      "color": "#868e96",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "",
+      "labelPos": 0.5,
+      "preset": "async",
+      "waypoints": []
+    },
+    {
+      "id": "e_t14",
+      "from": {
+        "nodeId": "n_le",
+        "anchor": "s"
+      },
+      "to": {
+        "nodeId": "n_post",
+        "anchor": "n"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "dotted",
+      "color": "#868e96",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "results & logs",
+      "labelPos": 0.6,
+      "preset": "async",
+      "waypoints": []
+    },
+    {
+      "id": "e_t15",
+      "from": {
+        "nodeId": "n_post",
+        "anchor": "e"
+      },
+      "to": {
+        "nodeId": "n_card",
+        "anchor": "w"
+      },
+      "routing": "orthogonal",
+      "lineStyle": "solid",
+      "color": "#7048e8",
+      "width": 2.4,
+      "startArrow": "none",
+      "endArrow": "standard",
+      "label": "reporting & notification",
+      "labelPos": 0.35,
+      "preset": "special",
+      "waypoints": [
+        {
+          "x": 1560,
+          "y": 1170
+        },
+        {
+          "x": 1560,
+          "y": 560
+        }
+      ]
+    }
+  ],
+  "legend": {
+    "show": true,
+    "mode": "auto",
+    "position": "bottom",
+    "items": []
+  }
+}
