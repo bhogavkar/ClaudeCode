@@ -47,6 +47,10 @@ AS
    *                                       active (ACTIVE_ASSIGN) primary
    *                                       assignment; reject if more than one
    *                                       active person id remains.
+   * 1.3     27-JUN-2026 <Author>          When more than one active person id
+   *                                       resolves, select the person with the
+   *                                       latest period of service start date
+   *                                       instead of rejecting.
    *************************************************************************/
 
    ----------------------------------------------------------------------------
@@ -316,9 +320,9 @@ AS
     *  operating unit business group (derived from p_org_id) scopes the lookup
     *  and only the active primary assignment (per_system_status =
     *  'ACTIVE_ASSIGN') is considered, so a suspended home assignment is
-    *  ignored even though its primary_flag is still 'Y'. The latest dated
-    *  record is returned. If more than one active person id still resolves
-    *  the record is rejected rather than guessed.
+    *  ignored even though its primary_flag is still 'Y'. When more than one
+    *  active person id still resolves the person with the latest period of
+    *  service start date (per_periods_of_service.date_start) is selected.
     *
     * CALLED BY
     *  validate_staging_records, export_expense_report_to_ap
@@ -336,10 +340,8 @@ AS
    BEGIN
       ----------------------------------------------------------------
       -- Count the distinct active persons for this employee number
-      -- within the operating unit business group, considering only the
-      -- active primary assignment (ACTIVE_ASSIGN). A suspended home
-      -- assignment of an expatriate is ignored even though its
-      -- primary_flag is 'Y', isolating a single active person id.
+      -- within the operating unit business group (active primary
+      -- assignment only). Expatriates may resolve to more than one.
       ----------------------------------------------------------------
       BEGIN
          SELECT COUNT (DISTINCT papf.person_id)
@@ -362,33 +364,43 @@ AS
             AND past.per_system_status = 'ACTIVE_ASSIGN';
       EXCEPTION
          WHEN OTHERS THEN
-            l_match_count := -1;
+            l_match_count := 1;
       END;
 
       IF NVL (l_match_count, 0) = 0
       THEN
          x_reject := 'No active employee found for employee number ' || p_employee_number;
          RETURN (FALSE);
-      ELSIF l_match_count > 1
+      END IF;
+
+      IF l_match_count > 1
       THEN
-         x_reject :=    'Multiple active employee records found for employee number '
-                     || p_employee_number
-                     || ' in the operating unit business group';
-         RETURN (FALSE);
+         write_log (p_msg_type         => 'LOG',
+                    p_msg_txt          =>    'Employee number '
+                                          || p_employee_number
+                                          || ' resolved to '
+                                          || l_match_count
+                                          || ' active persons; selecting the latest period of service.',
+                    p_employee_number  => p_employee_number);
       END IF;
 
       ----------------------------------------------------------------
-      -- Exactly one active person. Return the current dated record.
+      -- Pick the active person with the latest period of service start
+      -- date (the most recent deployment for an expatriate). The order
+      -- by is fully deterministic so exactly one person id is returned.
       ----------------------------------------------------------------
       BEGIN
          SELECT person_id, full_name
            INTO x_person_id, x_full_name
            FROM (SELECT papf.person_id,
                         papf.full_name,
-                        ROW_NUMBER () OVER (ORDER BY papf.effective_start_date DESC) rn
+                        ROW_NUMBER () OVER (ORDER BY ppos.date_start DESC,
+                                                     papf.effective_start_date DESC,
+                                                     papf.person_id DESC) rn
                    FROM per_all_people_f             papf,
                         per_all_assignments_f        paaf,
                         per_assignment_status_types  past,
+                        per_periods_of_service       ppos,
                         hr_operating_units           hou
                   WHERE papf.employee_number = p_employee_number
                     AND hou.organization_id = p_org_id
@@ -401,7 +413,13 @@ AS
                     AND paaf.assignment_type = 'E'
                     AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date AND paaf.effective_end_date
                     AND past.assignment_status_type_id = paaf.assignment_status_type_id
-                    AND past.per_system_status = 'ACTIVE_ASSIGN')
+                    AND past.per_system_status = 'ACTIVE_ASSIGN'
+                    AND ppos.person_id = papf.person_id
+                    AND ppos.business_group_id = papf.business_group_id
+                    AND ppos.date_start = (SELECT MAX (ppos2.date_start)
+                                             FROM per_periods_of_service ppos2
+                                            WHERE ppos2.person_id = papf.person_id
+                                              AND ppos2.business_group_id = papf.business_group_id))
           WHERE rn = 1;
       EXCEPTION
          WHEN NO_DATA_FOUND THEN
