@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>◧ DataDiff — CSV / Excel comparison</title>
+<!-- SheetJS reads both CSV and Excel entirely in the browser.
+     Loaded from the bundled vendor/ copy so the tool works fully offline;
+     falls back to a CDN only if the local file is missing. -->
+<script src="vendor/xlsx.full.min.js"></script>
+<script>
+  if (typeof XLSX === "undefined") {
+    document.write(
+      '<scr' + 'ipt src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></scr' + 'ipt>');
+  }
+</script>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#172033; --text:#e2e8f0;
+    --muted:#94a3b8; --line:#334155;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --add:#38bdf8; --accent:#818cf8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+       Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;}
+  .wrap{max-width:1100px;margin:0 auto;padding:32px 20px 64px;}
+  header h1{margin:0 0 4px;font-size:28px;}
+  header h1 .logo{color:var(--accent);}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:24px;}
+
+  /* upload + controls */
+  .drops{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 18px;}
+  .drop{flex:1;min-width:260px;background:var(--panel);border:2px dashed var(--line);
+        border-radius:14px;padding:20px;text-align:center;cursor:pointer;
+        transition:border-color .15s,background .15s;}
+  .drop:hover{border-color:var(--accent);}
+  .drop.filled{border-style:solid;border-color:var(--good);}
+  .drop.dragover{border-color:var(--accent);background:#1c2740;}
+  .drop .tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .drop .big{font-size:15px;margin-top:8px;word-break:break-all;}
+  .drop .hint{font-size:12px;color:var(--muted);margin-top:6px;}
+  .drop input{display:none;}
+
+  .controls{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+            padding:16px 18px;margin-bottom:18px;display:none;}
+  .controls.show{display:block;}
+  .controls .row{display:flex;gap:18px;flex-wrap:wrap;align-items:center;}
+  .controls label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px;}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;}
+  .seg button{background:transparent;color:var(--muted);border:0;padding:8px 14px;
+              cursor:pointer;font-size:14px;}
+  .seg button.active{background:var(--accent);color:#0b1020;font-weight:600;}
+  select[multiple]{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+            border-radius:9px;padding:6px;min-width:200px;min-height:84px;}
+  .go{background:var(--accent);color:#0b1020;border:0;border-radius:10px;padding:11px 22px;
+      font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;}
+  .go:disabled{opacity:.5;cursor:not-allowed;}
+  .err{color:var(--bad);font-size:14px;margin-top:8px;}
+  .keyhelp{font-size:12px;color:var(--muted);margin-top:6px;max-width:520px;}
+
+  /* report */
+  #report{display:none;}
+  .filebar{display:flex;gap:16px;flex-wrap:wrap;margin:18px 0 28px;}
+  .filebar .f{flex:1;min-width:240px;background:var(--panel);border:1px solid var(--line);
+             border-radius:12px;padding:14px 16px;}
+  .filebar .f .tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+  .filebar .f .name{font-size:15px;word-break:break-all;margin-top:4px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:8px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
+        text-align:center;border-top:4px solid var(--line);}
+  .card .num{font-size:34px;font-weight:700;}
+  .card .lbl{color:var(--muted);font-size:13px;margin-top:4px;}
+  .card.good{border-top-color:var(--good);}.card.good .num{color:var(--good);}
+  .card.warn{border-top-color:var(--warn);}.card.warn .num{color:var(--warn);}
+  .card.bad{border-top-color:var(--bad);}.card.bad .num{color:var(--bad);}
+  .card.add{border-top-color:var(--add);}.card.add .num{color:var(--add);}
+  .card.neutral .num{color:var(--accent);}
+  h2{font-size:19px;margin:36px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  h2 .count{color:var(--muted);font-size:14px;font-weight:400;}
+  .empty{color:var(--muted);background:var(--panel2);padding:14px 16px;border-radius:10px;}
+  .scroll{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:480px;}
+  table.data{border-collapse:collapse;width:100%;font-size:14px;}
+  table.data th{background:var(--panel2);text-align:left;padding:10px 12px;position:sticky;top:0;
+                color:var(--muted);font-weight:600;white-space:nowrap;}
+  table.data td{padding:9px 12px;border-top:1px solid var(--line);vertical-align:top;}
+  table.changes td.key{color:var(--accent);font-family:ui-monospace,monospace;}
+  table.changes td.col{color:var(--muted);}
+  table.changes td.old{color:var(--bad);background:rgba(239,68,68,.08);}
+  table.changes td.new{color:var(--good);background:rgba(34,197,94,.10);}
+  table.changes td.arrow{color:var(--muted);text-align:center;}
+  .nil{color:var(--muted);font-style:italic;}
+  .collist{list-style:none;padding:0;}
+  .collist li{padding:6px 12px;border-radius:8px;margin-bottom:6px;background:var(--panel2);}
+  .collist li.removed{color:var(--bad);} .collist li.added{color:var(--good);}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 18px;}
+  .toolbar button{background:var(--panel);color:var(--text);border:1px solid var(--line);
+                  border-radius:9px;padding:9px 16px;cursor:pointer;font-size:14px;}
+  .toolbar button:hover{border-color:var(--accent);}
+  footer{margin-top:48px;color:var(--muted);font-size:13px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1><span class="logo">◧ DataDiff</span> — CSV / Excel comparison</h1>
+    <div class="sub">Drop or pick two files. Everything runs in your browser —
+      nothing is uploaded anywhere. Supports <code>.csv</code>, <code>.xlsx</code>,
+      <code>.xls</code>.</div>
+  </header>
+
+  <div class="drops">
+    <label class="drop" id="drop1">
+      <div class="tag">File 1 — baseline</div>
+      <div class="big" id="name1">Click or drop a file here</div>
+      <div class="hint">CSV or Excel</div>
+      <input type="file" id="file1" accept=".csv,.txt,.xlsx,.xls,.xlsm"/>
+    </label>
+    <label class="drop" id="drop2">
+      <div class="tag">File 2 — compared</div>
+      <div class="big" id="name2">Click or drop a file here</div>
+      <div class="hint">CSV or Excel</div>
+      <input type="file" id="file2" accept=".csv,.txt,.xlsx,.xls,.xlsm"/>
+    </label>
+  </div>
+
+  <div class="controls" id="controls">
+    <div class="row">
+      <div>
+        <label>Match rows by</label>
+        <div class="seg" id="mode">
+          <button data-mode="key" class="active">Key column(s)</button>
+          <button data-mode="positional">Row position</button>
+        </div>
+      </div>
+      <div id="keyBox">
+        <label>Key column(s) — Ctrl/Cmd-click to pick several</label>
+        <select id="keys" multiple></select>
+      </div>
+    </div>
+    <div class="keyhelp" id="keyhelp">
+      Key matching pairs rows by their key value, so reordered or inserted/deleted
+      rows are handled correctly. Choose the column(s) that uniquely identify a row
+      (e.g. <code>id</code>).
+    </div>
+    <button class="go" id="go">Compare files</button>
+    <div class="err" id="err"></div>
+  </div>
+
+  <div id="report">
+    <div class="toolbar">
+      <button id="download">⬇ Download report (HTML)</button>
+      <button id="reset">↺ Compare different files</button>
+    </div>
+    <div class="filebar">
+      <div class="f"><div class="tag">File 1 (baseline)</div><div class="name" id="r1"></div></div>
+      <div class="f"><div class="tag">File 2 (compared)</div><div class="name" id="r2"></div></div>
+    </div>
+    <div class="cards" id="cards"></div>
+    <div id="body"></div>
+  </div>
+
+  <footer>DataDiff · all processing happens locally in your browser</footer>
+</div>
+
+<script>
+"use strict";
+
+const state = { f1:null, f2:null, mode:"key" };
+
+/* ---------- file loading ---------- */
+function wireDrop(dropId, inputId, nameId, slot){
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  const name = document.getElementById(nameId);
+  input.addEventListener("change", e => { if(e.target.files[0]) loadFile(e.target.files[0], slot, drop, name); });
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("dragover"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", e => {
+    e.preventDefault(); drop.classList.remove("dragover");
+    if(e.dataTransfer.files[0]){ input.files = e.dataTransfer.files;
+      loadFile(e.dataTransfer.files[0], slot, drop, name); }
+  });
+}
+
+function loadFile(file, slot, drop, nameEl){
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const wb = XLSX.read(ev.target.result, { type:"array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // defval:"" keeps empty cells; raw:false renders everything as text
+      const rows = XLSX.utils.sheet_to_json(ws, { defval:"", raw:false });
+      const headers = rows.length
+        ? Object.keys(rows[0])
+        : (XLSX.utils.sheet_to_json(ws,{header:1})[0] || []).map(String);
+      const data = rows.map(r => {
+        const o={}; headers.forEach(h => o[h] = String(r[h] ?? "").trim()); return o;
+      });
+      state[slot] = { name:file.name, headers, data };
+      drop.classList.add("filled");
+      nameEl.textContent = `${file.name}  (${data.length} rows, ${headers.length} cols)`;
+      onFilesChanged();
+    }catch(err){
+      document.getElementById("err").textContent = "Could not read " + file.name + ": " + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---------- when both files present ---------- */
+function onFilesChanged(){
+  if(!(state.f1 && state.f2)) return;
+  const controls = document.getElementById("controls");
+  controls.classList.add("show");
+  const common = state.f1.headers.filter(h => state.f2.headers.includes(h));
+  const sel = document.getElementById("keys");
+  sel.innerHTML = "";
+  common.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c; opt.textContent = c;
+    if(/^(id|key|code|number|no|pk|uuid)$/i.test(c)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  if(!sel.querySelector("option[selected]") && sel.options.length) sel.options[0].selected = true;
+  document.getElementById("err").textContent = "";
+}
+
+/* ---------- mode toggle ---------- */
+document.getElementById("mode").addEventListener("click", e => {
+  const btn = e.target.closest("button"); if(!btn) return;
+  state.mode = btn.dataset.mode;
+  [...e.currentTarget.children].forEach(b => b.classList.toggle("active", b===btn));
+  document.getElementById("keyBox").style.display = state.mode==="key" ? "" : "none";
+  document.getElementById("keyhelp").style.display = state.mode==="key" ? "" : "none";
+});
+
+/* ---------- comparison engine ---------- */
+function compare(f1, f2, keys){
+  const cols1 = f1.headers, cols2 = f2.headers;
+  const set1 = new Set(cols1), set2 = new Set(cols2);
+  const res = {
+    file1:f1.name, file2:f2.name, keys, mode: keys.length?"key":"positional",
+    rows1:f1.data.length, rows2:f2.data.length,
+    cols1, cols2,
+    addedCols: cols2.filter(c=>!set1.has(c)),
+    removedCols: cols1.filter(c=>!set2.has(c)),
+    commonCols: cols1.filter(c=>set2.has(c)),
+    only1:[], only2:[], changed:[], matched:0, unchanged:0
+  };
+  if(keys.length) compareByKey(f1,f2,keys,res); else compareByPos(f1,f2,res);
+  res.changedRows = new Set(res.changed.map(c=>c.key)).size;
+  return res;
+}
+
+function keyOf(row, keys){ return keys.map(k => row[k] ?? "").join(" | "); }
+
+function compareByKey(f1,f2,keys,res){
+  const cmpCols = res.commonCols.filter(c=>!keys.includes(c));
+  const idx1 = new Map(), idx2 = new Map();
+  f1.data.forEach(r => idx1.set(keyOf(r,keys), r));
+  f2.data.forEach(r => idx2.set(keyOf(r,keys), r));
+  f1.data.forEach(r => { if(!idx2.has(keyOf(r,keys))) res.only1.push(r); });
+  f2.data.forEach(r => { if(!idx1.has(keyOf(r,keys))) res.only2.push(r); });
+  idx1.forEach((r1,k) => {
+    if(!idx2.has(k)) return;
+    res.matched++;
+    const r2 = idx2.get(k); let changed=false;
+    cmpCols.forEach(col => {
+      const a=String(r1[col]??""), b=String(r2[col]??"");
+      if(a!==b){ res.changed.push({key:k,column:col,old:a,new:b}); changed=true; }
+    });
+    if(!changed) res.unchanged++;
+  });
+}
+
+function compareByPos(f1,f2,res){
+  const cmpCols = res.commonCols;
+  const n = Math.min(f1.data.length, f2.data.length);
+  for(let i=0;i<n;i++){
+    res.matched++;
+    const r1=f1.data[i], r2=f2.data[i]; let changed=false;
+    cmpCols.forEach(col => {
+      const a=String(r1[col]??""), b=String(r2[col]??"");
+      if(a!==b){ res.changed.push({key:"Row "+(i+1),column:col,old:a,new:b}); changed=true; }
+    });
+    if(!changed) res.unchanged++;
+  }
+  for(let i=n;i<f1.data.length;i++) res.only1.push(f1.data[i]);
+  for(let i=n;i<f2.data.length;i++) res.only2.push(f2.data[i]);
+}
+
+/* ---------- rendering ---------- */
+const esc = v => String(v??"").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function rowsTable(rows, cols, cls){
+  if(!rows.length) return "<p class='empty'>None 🎉</p>";
+  const head = cols.map(c=>`<th>${esc(c)}</th>`).join("");
+  const body = rows.map(r => "<tr>"+cols.map(c=>`<td>${esc(r[c]??"")}</td>`).join("")+"</tr>").join("");
+  return `<table class='data ${cls}'><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function reportBodyHTML(res){
+  const changeRows = res.changed.length
+    ? `<table class='data changes'><thead><tr><th>Key</th><th>Column</th>
+         <th>File 1 (old)</th><th></th><th>File 2 (new)</th></tr></thead><tbody>` +
+      res.changed.map(c=>`<tr><td class='key'>${esc(c.key)}</td><td class='col'>${esc(c.column)}</td>
+         <td class='old'>${esc(c.old)||"<span class='nil'>∅</span>"}</td>
+         <td class='arrow'>→</td>
+         <td class='new'>${esc(c.new)||"<span class='nil'>∅</span>"}</td></tr>`).join("") +
+      `</tbody></table>`
+    : "<p class='empty'>No cell-level changes 🎉</p>";
+
+  let colChanges;
+  if(res.addedCols.length || res.removedCols.length){
+    colChanges = "<ul class='collist'>" +
+      res.removedCols.map(c=>`<li class='removed'>− ${esc(c)} (removed)</li>`).join("") +
+      res.addedCols.map(c=>`<li class='added'>+ ${esc(c)} (added)</li>`).join("") + "</ul>";
+  } else colChanges = "<p class='empty'>Columns are identical in both files.</p>";
+
+  return `
+    <h2>Changed cells <span class='count'>(${res.changed.length} cell(s) across ${res.changedRows} row(s))</span></h2>
+    <div class='scroll'>${changeRows}</div>
+    <h2>Column changes</h2>
+    ${colChanges}
+    <h2>Rows only in File 1 <span class='count'>— removed (${res.only1.length})</span></h2>
+    <div class='scroll'>${rowsTable(res.only1, res.cols1, "removed")}</div>
+    <h2>Rows only in File 2 <span class='count'>— added (${res.only2.length})</span></h2>
+    <div class='scroll'>${rowsTable(res.only2, res.cols2, "added")}</div>`;
+}
+
+function cardsHTML(res){
+  const card = (v,l,c)=>`<div class='card ${c}'><div class='num'>${v}</div><div class='lbl'>${l}</div></div>`;
+  return card(res.rows1,"Rows in File 1","neutral")
+       + card(res.rows2,"Rows in File 2","neutral")
+       + card(res.unchanged,"Unchanged rows","good")
+       + card(res.changedRows,"Changed rows","warn")
+       + card(res.only1.length,"Only in File 1","bad")
+       + card(res.only2.length,"Only in File 2","add");
+}
+
+let lastResult = null;
+
+function render(res){
+  lastResult = res;
+  document.getElementById("r1").textContent = res.file1;
+  document.getElementById("r2").textContent = res.file2;
+  document.getElementById("cards").innerHTML = cardsHTML(res);
+  document.getElementById("body").innerHTML = reportBodyHTML(res);
+  document.getElementById("controls").classList.remove("show");
+  document.querySelector(".drops").style.display = "none";
+  document.getElementById("report").style.display = "block";
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ---------- buttons ---------- */
+document.getElementById("go").addEventListener("click", () => {
+  const err = document.getElementById("err"); err.textContent = "";
+  let keys = [];
+  if(state.mode==="key"){
+    keys = [...document.getElementById("keys").selectedOptions].map(o=>o.value);
+    if(!keys.length){ err.textContent = "Pick at least one key column, or switch to “Row position”."; return; }
+  }
+  render(compare(state.f1, state.f2, keys));
+});
+
+document.getElementById("reset").addEventListener("click", () => location.reload());
+
+document.getElementById("download").addEventListener("click", () => {
+  if(!lastResult) return;
+  const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>DataDiff Report</title>`
+    + `<style>${document.querySelector("style").textContent}</style></head><body><div class="wrap">`
+    + `<header><h1><span class="logo">◧ DataDiff</span> comparison report</h1>`
+    + `<div class="sub">Match mode: ${esc(lastResult.mode)}`
+    + (lastResult.keys.length ? ` · Keys: ${esc(lastResult.keys.join(", "))}`:``) + `</div></header>`
+    + `<div class="filebar"><div class="f"><div class="tag">File 1 (baseline)</div>`
+    + `<div class="name">${esc(lastResult.file1)}</div></div>`
+    + `<div class="f"><div class="tag">File 2 (compared)</div>`
+    + `<div class="name">${esc(lastResult.file2)}</div></div></div>`
+    + `<div class="cards">${cardsHTML(lastResult)}</div>${reportBodyHTML(lastResult)}`
+    + `<footer>Generated by DataDiff</footer></div></body></html>`;
+  const blob = new Blob([doc], {type:"text/html"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "datadiff_report.html";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+/* ---------- init ---------- */
+wireDrop("drop1","file1","name1","f1");
+wireDrop("drop2","file2","name2","f2");
+</script>
+</body>
+</html>

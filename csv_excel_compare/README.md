@@ -13,9 +13,35 @@ files** and produces a clear picture of what changed between them:
 
 It works with `.csv`, `.txt`, `.xlsx`, `.xls`, and `.xlsm` files.
 
+There are **two ways to use it**:
+
+1. **`datadiff.html`** — a zero-install web page. Just open it in a browser,
+   drop in two files, and view the comparison. Everything runs locally; nothing
+   is uploaded anywhere.
+2. **`compare.py`** — a command-line tool for scripting and automation.
+
 ---
 
-## Installation
+## Option 1 — the browser tool (no install)
+
+Open **`datadiff.html`** in any modern browser (double-click it, or
+`File ▸ Open`). Then:
+
+1. Drop or pick **File 1** (baseline) and **File 2** (compared).
+2. Choose how to match rows — by **key column(s)** (recommended) or by
+   **row position**.
+3. Click **Compare files**.
+4. Use **Download report (HTML)** to save a standalone copy of the result.
+
+Keep the `vendor/` folder next to `datadiff.html` — it contains the bundled
+spreadsheet reader (SheetJS) so the page works fully offline. If you move the
+HTML on its own, it falls back to loading that library from a CDN.
+
+---
+
+## Option 2 — the command-line tool
+
+### Installation
 
 ```bash
 pip install -r requirements.txt
