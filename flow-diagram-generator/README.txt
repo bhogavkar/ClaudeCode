@@ -30,6 +30,15 @@ The five starter diagrams in the templates/ folder are also built into the app:
 
   From a file: click  Open  ->  choose any templates/*.json file
 
+IMPORTING IMAGES & SVG
+----------------------
+The  Open  button also loads images, not just diagram JSON:
+  - SVG  -> imported as a VECTOR object with ALL graphics preserved intact
+           (paths, gradients, text, defs); fully movable/resizable/exportable.
+  - PNG / JPG / GIF / WebP -> imported at natural aspect ratio.
+You can also DRAG image files directly onto the canvas (drop where you want them).
+Imported images are saved inside your .json and included in PNG/SVG/PDF exports.
+
 FILES
 -----
   index.html ............. the entire application (self-contained: HTML + CSS + JS)

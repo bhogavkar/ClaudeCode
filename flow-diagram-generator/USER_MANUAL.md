@@ -206,7 +206,30 @@ explicitly, switching themes won't change it.
 - **What's stored:** everything — meta/chrome, theme, lanes, groups, every node (all
   styling, icon, badge, accent, type, lane/group membership, rotation), every edge
   (endpoints + anchors, routing, style, arrowheads, label + position, preset,
-  waypoints), and legend config. Save → Open round-trips your diagram exactly.
+  waypoints), imported images, and legend config. Save → Open round-trips exactly.
+
+### Importing images & SVG files
+
+The **Open** button (and `Ctrl/Cmd+O`) accepts more than diagram JSON — you can also
+load **images**:
+
+- **SVG** — imported as a **vector object with all graphics preserved intact** (every
+  path, gradient, text, and `<defs>` is kept). It is scaled into an editable box you can
+  move, resize, rotate, layer, group, and export. Nothing is lost or flattened.
+- **PNG / JPG / GIF / WebP** — imported at their natural aspect ratio as an editable
+  image object.
+
+Three ways to import:
+
+1. **Open** ▸ pick an `.svg` / `.png` / `.jpg`… file.
+2. **Drag a file** from your computer straight onto the canvas — it lands where you drop
+   it. You can drop several at once.
+3. Re-open an **SVG you exported from FlowForge** — it comes back fully intact.
+
+When an image is selected the inspector shows an **Image** panel: position & size,
+**Restore aspect ratio**, rotation, and an optional frame (border + shadow). Imported
+images are saved inside your `.json` (embedded), so Save → Open round-trips them too,
+and they are included in PNG / SVG / PDF exports.
 
 ---
 

@@ -213,7 +213,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 
     <div class="tb-group" id="g-file">
       <button class="btn" data-act="new" title="New diagram"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/></svg>New</button>
-      <button class="btn" data-act="open" title="Open JSON (Ctrl/Cmd+O)"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Open</button>
+      <button class="btn" data-act="open" title="Open diagram JSON, or import an SVG/PNG/JPG image (Ctrl/Cmd+O)"><svg viewBox="0 0 24 24"><path d="M3 7h6l2 2h10v10H3z"/></svg>Open</button>
       <button class="btn" data-act="save" title="Save JSON (Ctrl/Cmd+S)"><svg viewBox="0 0 24 24"><path d="M5 3h12l4 4v14H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg>Save</button>
       <div class="menu-wrap">
         <button class="btn" data-menu="export" title="Export">Export ▾</button>
@@ -311,7 +311,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 </div>
 
 <!-- hidden file input for Open -->
-<input type="file" id="file-input" accept="application/json,.json" style="display:none">
+<input type="file" id="file-input" accept="application/json,.json,image/svg+xml,.svg,image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
 
 <!-- toasts -->
 <div id="toasts" aria-live="polite"></div>
@@ -683,6 +683,7 @@ function renderNodes(){
 function buildNode(n){
   const st=nodeStyle(n);
   const g=svgEl("g",{class:"node","data-id":n.id,transform:`translate(${n.x} ${n.y}) rotate(${n.rotation||0} ${n.w/2} ${n.h/2})`,style:"cursor:move"});
+  if(n.shape==="image")return buildImageNode(n,g,st);
   if(n.shadow&&n.shape!=="text"){
     const f=ensureShadow();g.setAttribute("filter","url(#nodeshadow)");void f;
   }
@@ -756,6 +757,27 @@ let _shadowMade=false;
 function ensureShadow(){if(_shadowMade)return;const defs=$("#defs");const f=svgEl("filter",{id:"nodeshadow",x:"-20%",y:"-20%",width:"140%",height:"140%"});f.innerHTML='<feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1f2a3d" flood-opacity="0.16"/>';defs.appendChild(f);_shadowMade=true;}
 const _grads={};
 function ensureGradient(type){const id="grad_"+type;if(_grads[id])return id;const defs=$("#defs");const g=svgEl("linearGradient",{id,x1:"0",y1:"0",x2:"0",y2:"1"});const c=type==="start"?["#4dabf7","#1c7ed6"]:["#51cf66","#2f9e44"];g.innerHTML=`<stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/>`;defs.appendChild(g);_grads[id]=1;return id;}
+
+/* render an imported image/SVG node — graphics preserved intact, scaled to box */
+function buildImageNode(n,g,st){
+  if(n.imageKind==="svg"&&n.svgMarkup!=null){
+    const wrap=svgEl("svg",{x:0,y:0,width:n.w,height:n.h,viewBox:n.svgViewBox||("0 0 "+(n.naturalW||n.w)+" "+(n.naturalH||n.h)),preserveAspectRatio:n.preserve||"xMidYMid meet",overflow:"hidden","pointer-events":"none"});
+    try{
+      const doc=new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'+n.svgMarkup+'</svg>',"image/svg+xml");
+      if(!doc.querySelector("parsererror")){Array.from(doc.documentElement.childNodes).forEach(ch=>{try{wrap.appendChild(document.importNode(ch,true));}catch(e){}});}
+    }catch(e){}
+    g.appendChild(wrap);
+  }else if(n.src){
+    const im=svgEl("image",{x:0,y:0,width:n.w,height:n.h,preserveAspectRatio:n.preserve||"xMidYMid meet","pointer-events":"none"});
+    im.setAttribute("href",n.src);im.setAttributeNS("http://www.w3.org/1999/xlink","xlink:href",n.src);
+    g.appendChild(im);
+  }
+  if(n.stroke&&n.strokeWidth>0)g.appendChild(svgEl("rect",{x:0,y:0,width:n.w,height:n.h,fill:"none",stroke:n.stroke,"stroke-width":n.strokeWidth,"stroke-dasharray":n.strokeStyle==="dashed"?"7 5":(n.strokeStyle==="dotted"?"2 4":null)}));
+  // transparent hit rect so the whole box is selectable even over empty SVG areas
+  g.insertBefore(svgEl("rect",{x:0,y:0,width:n.w,height:n.h,fill:"transparent"}),g.firstChild);
+  if(STATE.sel.has(n.id))g.appendChild(svgEl("rect",{x:-3,y:-3,width:n.w+6,height:n.h+6,rx:4,fill:"none",stroke:"#f5a623","stroke-width":1.6/STATE.view.zoom,"stroke-dasharray":"4 3"}));
+  return g;
+}
 /* ============================== CONNECTORS ========================= */
 const ANCHORS={n:[.5,0],s:[.5,1],e:[1,.5],w:[0,.5],ne:[1,0],nw:[0,0],se:[1,1],sw:[0,1],c:[.5,.5]};
 function anchorPoint(n,a){const f=ANCHORS[a]||ANCHORS.c;return {x:n.x+n.w*f[0],y:n.y+n.h*f[1]};}
@@ -1211,6 +1233,7 @@ function inspDiagram(){
 
 const SHAPE_OPTS=[["rect","Rectangle"],["roundrect","Rounded"],["diamond","Diamond"],["terminator","Terminator"],["parallelogram","Parallelogram"],["cylinder","Cylinder"],["document","Document"],["multidoc","Multi-document"],["hexagon","Hexagon"],["trapezoid","Trapezoid"],["pentagon","Off-page"],["predefined","Predefined"],["internalstorage","Internal storage"],["display","Display"],["circle","Circle"],["ellipse","Ellipse"],["junction","Junction"],["note","Note"],["card","Card"],["text","Text only"]];
 function inspNode(n){
+  if(n.shape==="image")return inspImage(n);
   $("#insp-title").textContent="Node";
   const presetChips=Object.keys(TYPE_PRESETS).map(t=>`<div class="preset-chip" data-preset="${t}"><span class="dot" style="background:${TYPE_PRESETS[t].accent}"></span>${TYPE_PRESETS[t].label}</div>`).join("");
   INSP.innerHTML=
@@ -1234,6 +1257,22 @@ function inspNode(n){
       +chk("shadow",n.shadow,"Drop shadow"));
   bindAll(n);
   buildIconGrid(n);
+}
+function inspImage(n){
+  $("#insp-title").textContent="Image";
+  const ar=(n.naturalW&&n.naturalH)?(n.naturalW/n.naturalH):(n.w/n.h);
+  INSP.innerHTML=
+    sec("Imported "+(n.imageKind==="svg"?"SVG (vector, intact)":"image"),
+      `<p style="color:var(--muted);font-size:12px;line-height:1.5">All original graphics are preserved. Move, resize, layer, group, and export it like any object.</p>`)
+    +sec("Position & size",`<div class="field-row">${field("X",num("x",Math.round(n.x)))}${field("Y",num("y",Math.round(n.y)))}</div>`
+      +`<div class="field-row">${field("W",num("w",Math.round(n.w),20))}${field("H",num("h",Math.round(n.h),20))}</div>`
+      +`<button class="btn" data-act="img-fit-aspect" style="width:100%;justify-content:center;margin-top:2px">Restore aspect ratio</button>`
+      +field("Rotation",`<input type="range" data-bind="rotation" min="0" max="360" value="${n.rotation||0}">`))
+    +sec("Frame",`<div class="field-row">${field("Border",color("stroke",n.stroke||"#dbe2ea"))}${field("Border w",num("strokeWidth",n.strokeWidth||0,0,12,0.5))}</div>`
+      +field("Border style",sel("strokeStyle",n.strokeStyle||"solid",["solid","dashed","dotted"]))
+      +chk("shadow",n.shadow,"Drop shadow"));
+  bindAll(n);
+  void ar;
 }
 function buildIconGrid(n){
   const grid=$("#icon-grid");if(!grid)return;
@@ -1356,7 +1395,10 @@ function addFromPalette(shape,pos){
 function centerWorld(){const r=svg.getBoundingClientRect();return screenToWorld(r.left+r.width/2,r.top+r.height/2);}
 // drop on canvas
 $("#canvas-wrap").addEventListener("dragover",ev=>{ev.preventDefault();ev.dataTransfer.dropEffect="copy";});
-$("#canvas-wrap").addEventListener("drop",ev=>{ev.preventDefault();const shape=ev.dataTransfer.getData("text/shape");if(shape)addFromPalette(shape,screenToWorld(ev.clientX,ev.clientY));});
+$("#canvas-wrap").addEventListener("drop",ev=>{ev.preventDefault();
+  const shape=ev.dataTransfer.getData("text/shape");if(shape){addFromPalette(shape,screenToWorld(ev.clientX,ev.clientY));return;}
+  const files=ev.dataTransfer.files;if(files&&files.length){const p=screenToWorld(ev.clientX,ev.clientY);Array.from(files).forEach(f=>importFile(f,p));}
+});
 
 function addLane(orientation){
   const base=D().lanes.length;const vert=orientation==="vertical";
@@ -1399,6 +1441,7 @@ const ACTIONS={
   help:()=>$("#help-overlay").classList.add("open"),
   "add-lane-v":()=>addLane("vertical"),"add-lane-h":()=>addLane("horizontal"),"add-group":()=>addGroup("dashed"),
   "flip-edge":()=>{const e=findEdge([...STATE.sel][0]);if(e){const f=e.from;e.from=e.to;e.to=f;commit();}},
+  "img-fit-aspect":()=>{const n=findNode([...STATE.sel][0]);if(n&&n.naturalW&&n.naturalH){n.h=Math.round(n.w*n.naturalH/n.naturalW);commit();buildInspector();}},
   "clear-waypoints":()=>{const e=findEdge([...STATE.sel][0]);if(e){e.waypoints=[];commit();}}
 };
 document.addEventListener("click",ev=>{const b=ev.target.closest("[data-act]");if(b){closeMenus();const fn=ACTIONS[b.dataset.act];if(fn)fn();}});
@@ -1485,12 +1528,78 @@ function saveJSON(){
   toast("Saved "+name,"success");
 }
 $("#file-input").addEventListener("change",ev=>{
-  const f=ev.target.files[0];if(!f)return;
-  const rd=new FileReader();
-  rd.onload=()=>{loadJSONString(rd.result);ev.target.value="";};
-  rd.onerror=()=>toast("Could not read file","error");
-  rd.readAsText(f);
+  const files=Array.from(ev.target.files||[]);ev.target.value="";
+  files.forEach(f=>importFile(f));
 });
+/* Dispatch any opened/dropped file by kind: JSON diagram, SVG, or raster image.
+   Images are imported INTACT (no graphics lost) as movable/resizable objects. */
+function importFile(f,pos){
+  if(!f)return;
+  const name=(f.name||"").toLowerCase();
+  const isJSON=f.type==="application/json"||name.endsWith(".json");
+  const isSVG=f.type==="image/svg+xml"||name.endsWith(".svg");
+  const isRaster=/^image\//.test(f.type)||/\.(png|jpe?g|gif|webp|bmp)$/.test(name);
+  const rd=new FileReader();
+  rd.onerror=()=>toast("Could not read "+(f.name||"file"),"error");
+  if(isRaster&&!isSVG){
+    rd.onload=()=>importRaster(rd.result,f.name,pos);
+    rd.readAsDataURL(f);return;
+  }
+  // read as text for JSON / SVG (and sniff unknown types)
+  rd.onload=()=>{
+    const txt=String(rd.result||"");
+    if(isJSON){loadJSONString(txt);return;}
+    if(isSVG){importSVGText(txt,f.name,pos);return;}
+    const t=txt.trimStart();
+    if(t[0]==="{"){loadJSONString(txt);}
+    else if(/^<\?xml|^<svg|<svg[\s>]/i.test(t)){importSVGText(txt,f.name,pos);}
+    else toast("Unsupported file type: "+(f.name||""),"error");
+  };
+  rd.readAsText(f);
+}
+/* Import an SVG file: keep ALL original graphics (paths, defs, gradients, text)
+   embedded intact, scaled into an editable node that you can move/resize/layer. */
+function importSVGText(text,name,pos){
+  let dom;
+  try{dom=new DOMParser().parseFromString(text,"image/svg+xml");}catch(e){toast("Could not parse SVG","error");return false;}
+  const root=dom.querySelector("svg");
+  if(!root||dom.querySelector("parsererror")){toast("Invalid or corrupt SVG file","error");return false;}
+  root.querySelectorAll("script,foreignObject script").forEach(s=>s.remove()); // safety only; graphics untouched
+  let vb=root.getAttribute("viewBox");
+  let w=parseFloat(root.getAttribute("width"))||0,hh=parseFloat(root.getAttribute("height"))||0;
+  if(vb){const p=vb.split(/[\s,]+/).map(Number);if(p.length===4){if(!w)w=p[2];if(!hh)hh=p[3];}}
+  if(!w)w=400;if(!hh)hh=300;
+  if(!vb)vb="0 0 "+w+" "+hh;
+  const maxDim=720,scale=Math.min(1,maxDim/Math.max(w,hh));
+  const nw=Math.max(40,Math.round(w*scale)),nh=Math.max(40,Math.round(hh*scale));
+  const c=pos||centerWorld();
+  const n=makeNode("process",snap(c.x-nw/2),snap(c.y-nh/2));
+  n.type="image";n.shape="image";n.title="";n.body="";n.icon="";n.shadow=false;
+  n.accent={show:false,color:"#5c6b7e",width:5};n.badge={show:false,value:"",color:"#c92a2a"};
+  n.w=nw;n.h=nh;n.fill="none";n.stroke="";n.strokeWidth=0;
+  n.imageKind="svg";n.svgViewBox=vb;n.svgMarkup=root.innerHTML;n.naturalW=w;n.naturalH=hh;n.preserve="xMidYMid meet";
+  D().nodes.push(n);select(n.id);commit();
+  toast("Imported "+(name||"SVG")+" (intact)","success");return true;
+}
+/* Import a raster image as an editable object at its natural aspect ratio. */
+function importRaster(dataUrl,name,pos){
+  const img=new Image();
+  img.onload=()=>{
+    const w=img.naturalWidth||400,hh=img.naturalHeight||300;
+    const maxDim=720,scale=Math.min(1,maxDim/Math.max(w,hh));
+    const nw=Math.max(40,Math.round(w*scale)),nh=Math.max(40,Math.round(hh*scale));
+    const c=pos||centerWorld();
+    const n=makeNode("process",snap(c.x-nw/2),snap(c.y-nh/2));
+    n.type="image";n.shape="image";n.title="";n.body="";n.icon="";n.shadow=false;
+    n.accent={show:false,color:"#5c6b7e",width:5};n.badge={show:false,value:"",color:"#c92a2a"};
+    n.w=nw;n.h=nh;n.fill="none";n.stroke="";n.strokeWidth=0;
+    n.imageKind="raster";n.src=dataUrl;n.naturalW=w;n.naturalH=hh;n.preserve="xMidYMid meet";
+    D().nodes.push(n);select(n.id);commit();
+    toast("Imported "+(name||"image"),"success");
+  };
+  img.onerror=()=>toast("Could not load image "+(name||""),"error");
+  img.src=dataUrl;
+}
 function loadJSONString(str){
   let data;try{data=JSON.parse(str);}catch(e){toast("Invalid JSON file","error");return false;}
   if(!data||typeof data!=="object"||!Array.isArray(data.nodes)){toast("Not a valid diagram file (missing nodes)","error");return false;}
