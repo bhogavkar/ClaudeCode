@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" data-base="vs-dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oracle PL/SQL IDE — Enterprise Edition</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="css/main.css" />
+</head>
+<body>
+  <!-- ===== Title / menu bar ============================================== -->
+  <header id="titlebar">
+    <div class="brand">
+      <span class="brand-mark">❖</span>
+      <span class="brand-name">Oracle&nbsp;PL/SQL&nbsp;IDE</span>
+      <span class="brand-sub">Enterprise Edition</span>
+    </div>
+    <nav class="menu">
+      <button data-action="new-file"  title="New file (Ctrl+N)">New</button>
+      <button data-action="open-file" title="Open file (Ctrl+O)">Open</button>
+      <button data-action="save-file" title="Save / download (Ctrl+S)">Save</button>
+      <span class="sep"></span>
+      <button data-action="format"    title="Format code (Ctrl+Shift+F)">Format</button>
+      <button data-action="run"       title="Run script (F5)">▶ Run</button>
+      <button data-action="compile"   title="Compile object (F9)">Compile</button>
+      <span class="sep"></span>
+      <button data-action="palette"   title="Command palette (Ctrl+Shift+P)">⌘ Palette</button>
+    </nav>
+    <div class="menu-right">
+      <label class="theme-label">Theme</label>
+      <select id="theme-select" title="Editor theme"></select>
+    </div>
+    <input type="file" id="file-input" multiple hidden
+           accept=".sql,.pks,.pkb,.pls,.prc,.fnc,.trg,.typ,.tps,.vw,.csv,.xml,.json,.txt,.log,.ctl,.dat" />
+  </header>
+
+  <div id="workbench">
+    <!-- ===== Activity bar ============================================== -->
+    <aside id="activitybar">
+      <button class="act active" data-view="explorer" title="Project Explorer">🗂</button>
+      <button class="act" data-view="database" title="Database Explorer">🛢</button>
+      <button class="act" data-view="search" title="Search">🔍</button>
+      <button class="act" data-view="debug" title="Debug">🐞</button>
+      <button class="act" data-view="git" title="Source Control">⎇</button>
+      <button class="act" data-view="quality" title="Code Quality">📊</button>
+      <div class="act-spacer"></div>
+      <button class="act" data-view="ai" title="AI Assistant">✨</button>
+    </aside>
+
+    <!-- ===== Side panel =============================================== -->
+    <section id="sidebar">
+      <!-- Explorer -->
+      <div class="view active" data-view="explorer">
+        <div class="view-title">Project Explorer
+          <span class="view-actions"><button data-action="new-file" title="New file">＋</button></span>
+        </div>
+        <ul id="file-tree" class="tree"></ul>
+        <div class="view-subtitle">Sample Files</div>
+        <ul id="sample-tree" class="tree"></ul>
+      </div>
+
+      <!-- Database -->
+      <div class="view" data-view="database">
+        <div class="view-title">Database Explorer
+          <span class="view-actions"><button data-action="add-conn" title="Add connection">＋</button></span>
+        </div>
+        <ul id="conn-tree" class="tree"></ul>
+        <div class="view-note">Demo metadata (offline). Connections, schemas &amp; objects are illustrative; wire a backend to query a live database.</div>
+      </div>
+
+      <!-- Search -->
+      <div class="view" data-view="search">
+        <div class="view-title">Search</div>
+        <div class="search-box">
+          <input id="search-input" placeholder="Search across open files" />
+          <label><input type="checkbox" id="search-regex" /> .* regex</label>
+          <label><input type="checkbox" id="search-case" /> Aa case</label>
+        </div>
+        <div class="search-replace">
+          <input id="replace-input" placeholder="Replace with…" />
+          <button data-action="replace-all">Replace All (in file)</button>
+        </div>
+        <ul id="search-results" class="tree"></ul>
+      </div>
+
+      <!-- Debug -->
+      <div class="view" data-view="debug">
+        <div class="view-title">Debug &amp; Run</div>
+        <div class="pad">
+          <button class="wbtn" data-action="run">▶ Run Script (F5)</button>
+          <button class="wbtn" data-action="run-selection">▶ Run Selection</button>
+          <button class="wbtn" data-action="compile">Compile Object (F9)</button>
+          <div class="hr"></div>
+          <div class="kv"><span>Breakpoints</span><b id="bp-count">0</b></div>
+          <div class="view-note">Toggle a breakpoint by clicking the gutter. A live debugger requires a database backend; this build simulates execution &amp; compilation feedback.</div>
+        </div>
+      </div>
+
+      <!-- Git -->
+      <div class="view" data-view="git">
+        <div class="view-title">Source Control</div>
+        <div class="pad">
+          <input id="commit-msg" placeholder="Commit message" />
+          <button class="wbtn" data-action="git-commit">✓ Commit (simulated)</button>
+          <div class="hr"></div>
+          <div class="view-subtitle">Changes</div>
+          <ul id="git-changes" class="tree"></ul>
+          <div class="view-note">Use the real <code>git</code> CLI to push. This panel tracks in-session edits.</div>
+        </div>
+      </div>
+
+      <!-- Quality -->
+      <div class="view" data-view="quality">
+        <div class="view-title">Code Quality</div>
+        <div class="pad" id="quality-body">
+          <button class="wbtn" data-action="analyze-quality">Analyze current file</button>
+          <div id="quality-report"></div>
+        </div>
+      </div>
+
+      <!-- AI (sidebar mirror toggle) -->
+      <div class="view" data-view="ai">
+        <div class="view-title">AI Assistant</div>
+        <div class="pad"><button class="wbtn" data-action="toggle-ai">Open AI panel →</button></div>
+      </div>
+    </section>
+
+    <div class="vsplit" id="split-sidebar"></div>
+
+    <!-- ===== Editor group ============================================ -->
+    <main id="editor-group">
+      <div id="tabs"></div>
+      <div id="breadcrumb"></div>
+      <div id="editor-host">
+        <div id="editor" class="editor-pane"></div>
+        <div id="csv-host" class="csv-pane" hidden></div>
+      </div>
+      <div class="hsplit" id="split-panel"></div>
+      <!-- Bottom panel -->
+      <div id="bottom-panel">
+        <div class="panel-tabs">
+          <button class="ptab active" data-panel="problems">Problems <span id="problem-count" class="badge">0</span></button>
+          <button class="ptab" data-panel="output">Output</button>
+          <button class="ptab" data-panel="dbms">DBMS Output</button>
+          <button class="ptab" data-panel="plan">Explain Plan</button>
+          <div class="panel-spacer"></div>
+          <button class="picon" data-action="clear-panel" title="Clear">🗑</button>
+          <button class="picon" data-action="toggle-bottom" title="Toggle panel">▾</button>
+        </div>
+        <div class="panel-body">
+          <div class="pview active" data-panel="problems"><ul id="problems-list" class="tree"></ul></div>
+          <pre class="pview" data-panel="output" id="output-console"></pre>
+          <pre class="pview" data-panel="dbms" id="dbms-output"></pre>
+          <div class="pview" data-panel="plan" id="explain-plan"></div>
+        </div>
+      </div>
+    </main>
+
+    <div class="vsplit" id="split-ai"></div>
+
+    <!-- ===== AI panel =============================================== -->
+    <aside id="ai-panel">
+      <div class="view-title">✨ Oracle AI Assistant
+        <span class="view-actions"><button data-action="toggle-ai" title="Hide">✕</button></span>
+      </div>
+      <div class="ai-quick">
+        <button data-ai="explain">Explain</button>
+        <button data-ai="review">Review</button>
+        <button data-ai="optimize">Optimize</button>
+        <button data-ai="document">Document</button>
+      </div>
+      <div id="ai-thread" class="ai-thread"></div>
+      <div class="ai-input">
+        <textarea id="ai-text" rows="2" placeholder="Ask: generate a trigger · explain ORA-01422 · optimize this query"></textarea>
+        <button id="ai-send" title="Send">➤</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ===== Status bar ============================================== -->
+  <footer id="statusbar">
+    <span id="st-lang">Oracle SQL</span>
+    <span id="st-conn">⛁ No connection</span>
+    <span class="st-spacer"></span>
+    <span id="st-problems">0 ⚠</span>
+    <span id="st-pos">Ln 1, Col 1</span>
+    <span id="st-sel"></span>
+    <span id="st-eol">LF</span>
+    <span id="st-enc">UTF-8</span>
+    <span id="st-theme"></span>
+  </footer>
+
+  <!-- ===== Command palette ======================================== -->
+  <div id="palette" class="palette" hidden>
+    <input id="palette-input" placeholder="Type a command…" />
+    <ul id="palette-list"></ul>
+  </div>
+
+  <!-- App modules (no external deps) -->
+  <script src="js/data/oracle-data.js"></script>
+  <script src="js/lang/themes.js"></script>
+  <script src="js/lang/oracle-monaco.js"></script>
+  <script src="js/core/formatter.js"></script>
+  <script src="js/core/linter.js"></script>
+  <script src="js/core/ai.js"></script>
+  <script src="js/core/csv.js"></script>
+  <script src="js/core/files.js"></script>
+  <script src="js/app.js"></script>
+
+  <!-- Resilient Monaco loader: tries a local vendored copy first, then CDNs.
+       To run fully offline, place the editor at  vendor/monaco/min/vs  (see README). -->
+  <script>
+    (function () {
+      var SOURCES = [
+        'vendor/monaco/min/vs',
+        'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs',
+        'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs',
+        'https://unpkg.com/monaco-editor@0.45.0/min/vs'
+      ];
+      function tryNext(i) {
+        if (i >= SOURCES.length) { showError(); return; }
+        var vs = SOURCES[i];
+        var s = document.createElement('script');
+        s.src = vs + '/loader.js';
+        s.onload = function () {
+          if (window.require && window.__bootIDE) { window.__bootIDE(vs); }
+          else tryNext(i + 1);
+        };
+        s.onerror = function () { tryNext(i + 1); };
+        document.body.appendChild(s);
+      }
+      function showError() {
+        var d = document.createElement('div');
+        d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1e1e1e;color:#ddd;font-family:sans-serif;text-align:center;z-index:9999;padding:40px';
+        d.innerHTML = '<div><h2>Editor engine could not be loaded</h2>' +
+          '<p style="color:#999;max-width:560px;line-height:1.6">The Monaco editor is fetched from a CDN and no network route was available. ' +
+          'To run fully offline, vendor it locally — see the <code>README.md</code> (place files under <code>vendor/monaco/min/vs</code>) — then reload.</p></div>';
+        document.body.appendChild(d);
+      }
+      tryNext(0);
+    })();
+  </script>
+</body>
+</html>
