@@ -37,6 +37,11 @@ AS
    * VERSION DATE        AUTHOR(S)       DESCRIPTION
    * ------- ----------- --------------- ------------------------------------
    * 1.0     25-JUN-2026 <Author>          Initial version.
+   * 1.1     27-JUN-2026 <Author>          Derive a single active person id
+   *                                       using the operating unit business
+   *                                       group, with expatriate employee
+   *                                       handling (reject when more than one
+   *                                       active person id resolves).
    *************************************************************************/
 
    ----------------------------------------------------------------------------
@@ -292,63 +297,99 @@ AS
     * NAME                TYPE    DESCRIPTION
     * ------------------- ------- -------------------------------------------
     * p_employee_number   IN      WD employee number
+    * p_org_id            IN      Operating unit id (resolves business group)
     * x_person_id         OUT     Derived person id (= employee id)
     * x_full_name         OUT     Employee full name
     * x_reject            OUT     Reject reason when FALSE
     *
     * RETURN VALUE
-    *  BOOLEAN - TRUE when a valid active employee is found
+    *  BOOLEAN - TRUE when a single valid active employee is found
+    *
+    * NOTE
+    *  The employee number alone is not unique for expatriate employees, who
+    *  may hold person records in more than one business group. The operating
+    *  unit business group (derived from p_org_id) scopes the lookup, the
+    *  active period of service ensures only a current employee is taken and
+    *  the latest dated record is returned. If more than one active person id
+    *  still resolves the record is rejected rather than guessed.
     *
     * CALLED BY
     *  validate_staging_records, export_expense_report_to_ap
     *************************************************************************/
    FUNCTION get_employee_details (
       p_employee_number   IN       VARCHAR2,
+      p_org_id            IN       NUMBER,
       x_person_id         OUT      NUMBER,
       x_full_name         OUT      VARCHAR2,
       x_reject            OUT      VARCHAR2
    )
       RETURN BOOLEAN
    IS
-      l_active_flag   VARCHAR2 (1) := 'N';
+      l_match_count   NUMBER := 0;
    BEGIN
       ----------------------------------------------------------------
-      -- Derive person id from the employee number (current employee).
+      -- Count the distinct active persons for this employee number
+      -- within the operating unit business group. This isolates a
+      -- single active person and traps expatriate employees who may be
+      -- set up in more than one business group.
       ----------------------------------------------------------------
       BEGIN
-         SELECT papf.person_id, papf.full_name
-           INTO x_person_id, x_full_name
-           FROM per_all_people_f papf
+         SELECT COUNT (DISTINCT papf.person_id)
+           INTO l_match_count
+           FROM per_all_people_f         papf,
+                per_periods_of_service   ppos,
+                hr_operating_units       hou
           WHERE papf.employee_number = p_employee_number
+            AND hou.organization_id = p_org_id
+            AND papf.business_group_id = hou.business_group_id
             AND papf.current_employee_flag = 'Y'
             AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
-            AND ROWNUM = 1;
+            AND ppos.person_id = papf.person_id
+            AND ppos.business_group_id = papf.business_group_id
+            AND TRUNC (SYSDATE) <= TRUNC (NVL (ppos.final_process_date, SYSDATE));
       EXCEPTION
-         WHEN NO_DATA_FOUND THEN
-            x_reject := 'Invalid employee ' || p_employee_number;
-            RETURN (FALSE);
+         WHEN OTHERS THEN
+            l_match_count := -1;
       END;
 
-      ----------------------------------------------------------------
-      -- Verify the employee is active (no final processed termination).
-      ----------------------------------------------------------------
-      BEGIN
-         SELECT 'Y'
-           INTO l_active_flag
-           FROM per_periods_of_service ppos
-          WHERE ppos.person_id = x_person_id
-            AND TRUNC (SYSDATE) <= TRUNC (NVL (ppos.final_process_date, SYSDATE))
-            AND ROWNUM = 1;
-      EXCEPTION
-         WHEN NO_DATA_FOUND THEN
-            l_active_flag := 'N';
-      END;
-
-      IF l_active_flag = 'N'
+      IF NVL (l_match_count, 0) = 0
       THEN
-         x_reject := 'Inactive employee ' || p_employee_number;
+         x_reject := 'No active employee found for employee number ' || p_employee_number;
+         RETURN (FALSE);
+      ELSIF l_match_count > 1
+      THEN
+         x_reject :=    'Multiple active employee records found for employee number '
+                     || p_employee_number
+                     || ' in the operating unit business group';
          RETURN (FALSE);
       END IF;
+
+      ----------------------------------------------------------------
+      -- Exactly one active person. Return the current dated record.
+      ----------------------------------------------------------------
+      BEGIN
+         SELECT person_id, full_name
+           INTO x_person_id, x_full_name
+           FROM (SELECT papf.person_id,
+                        papf.full_name,
+                        ROW_NUMBER () OVER (ORDER BY papf.effective_start_date DESC) rn
+                   FROM per_all_people_f         papf,
+                        per_periods_of_service   ppos,
+                        hr_operating_units       hou
+                  WHERE papf.employee_number = p_employee_number
+                    AND hou.organization_id = p_org_id
+                    AND papf.business_group_id = hou.business_group_id
+                    AND papf.current_employee_flag = 'Y'
+                    AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
+                    AND ppos.person_id = papf.person_id
+                    AND ppos.business_group_id = papf.business_group_id
+                    AND TRUNC (SYSDATE) <= TRUNC (NVL (ppos.final_process_date, SYSDATE)))
+          WHERE rn = 1;
+      EXCEPTION
+         WHEN NO_DATA_FOUND THEN
+            x_reject := 'No active employee found for employee number ' || p_employee_number;
+            RETURN (FALSE);
+      END;
 
       RETURN (TRUE);
    EXCEPTION
@@ -744,18 +785,7 @@ AS
             END IF;
 
             ------------------------------------------------------------
-            -- 2. Employee valid and active.
-            ------------------------------------------------------------
-            IF l_reject IS NULL
-            THEN
-               IF NOT get_employee_details (l_hdr_tab (i).employee_number, l_person_id, l_full_name, l_reject)
-               THEN
-                  NULL;   -- l_reject already populated
-               END IF;
-            END IF;
-
-            ------------------------------------------------------------
-            -- 3. Operating unit.
+            -- 2. Operating unit (resolved first; drives employee lookup).
             ------------------------------------------------------------
             IF l_reject IS NULL
             THEN
@@ -774,6 +804,17 @@ AS
                   WHEN OTHERS THEN
                      l_reject := 'Error validating Operating Unit';
                END;
+            END IF;
+
+            ------------------------------------------------------------
+            -- 3. Employee valid, active and single (expatriate aware).
+            ------------------------------------------------------------
+            IF l_reject IS NULL
+            THEN
+               IF NOT get_employee_details (l_hdr_tab (i).employee_number, p_org_id, l_person_id, l_full_name, l_reject)
+               THEN
+                  NULL;   -- l_reject already populated
+               END IF;
             END IF;
 
             ------------------------------------------------------------
@@ -1185,7 +1226,7 @@ AS
             ------------------------------------------------------------
             -- Step 3 - Employee derivation (active only).
             ------------------------------------------------------------
-            IF NOT get_employee_details (l_emp_num, l_person_id, l_full_name, l_reject)
+            IF NOT get_employee_details (l_emp_num, l_org_id, l_person_id, l_full_name, l_reject)
             THEN
                RAISE e_validation_failed;
             END IF;
