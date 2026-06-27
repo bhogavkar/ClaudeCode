@@ -1,0 +1,14 @@
+{
+  "name": "Enterprise Diagram Designer",
+  "short_name": "Diagrams",
+  "description": "A professional, browser-based diagramming tool. No server, no build, no install.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f5f8",
+  "theme_color": "#1f6feb",
+  "icons": [
+    { "src": "assets/icons/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

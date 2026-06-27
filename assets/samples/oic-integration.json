@@ -1,0 +1,216 @@
+{
+  "id": "doc_mqwnfrt3_0",
+  "name": "Oracle Integration Cloud — Architecture",
+  "created": 1782582235527,
+  "modified": 1782582236620,
+  "schema": 1,
+  "settings": {
+    "gridType": "dot",
+    "gridSize": 20,
+    "snap": true,
+    "snapTolerance": 6,
+    "smartGuides": true,
+    "theme": "light",
+    "background": "#fbfcfe",
+    "pageWidth": 1654,
+    "pageHeight": 1169,
+    "showPage": false
+  },
+  "layers": [
+    {
+      "id": "layer_mqwnfrt3_1",
+      "name": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "opacity": 1
+    }
+  ],
+  "shapes": [
+    {
+      "type": "cloud-oracleebs",
+      "x": 60,
+      "y": 220,
+      "w": 110,
+      "h": 80,
+      "text": "Oracle EBS",
+      "style": {
+        "fill": "#fce8e6",
+        "stroke": "#c74634"
+      },
+      "id": "s_mqwnfsng_d"
+    },
+    {
+      "type": "cloud-storage",
+      "x": 60,
+      "y": 360,
+      "w": 110,
+      "h": 80,
+      "text": "SFTP Server",
+      "style": {
+        "fill": "#eef4ff",
+        "stroke": "#1f6feb"
+      },
+      "id": "s_mqwnfsng_e"
+    },
+    {
+      "type": "cloud-oracleintegration",
+      "x": 330,
+      "y": 250,
+      "w": 180,
+      "h": 110,
+      "text": "OIC Integration\n(App Driven)",
+      "style": {
+        "fill": "#fce8e6",
+        "stroke": "#c74634"
+      },
+      "id": "s_mqwnfsng_f"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 410,
+      "w": 130,
+      "h": 64,
+      "text": "Mapping &\nEnrichment",
+      "style": {},
+      "id": "s_mqwnfsng_g"
+    },
+    {
+      "type": "erd-table",
+      "x": 360,
+      "y": 110,
+      "w": 170,
+      "h": 120,
+      "text": "DVM Lookups",
+      "style": {},
+      "id": "s_mqwnfsng_h"
+    },
+    {
+      "type": "cloud-oraclecloud",
+      "x": 640,
+      "y": 200,
+      "w": 110,
+      "h": 80,
+      "text": "Fusion ERP\nREST API",
+      "style": {
+        "fill": "#fce8e6",
+        "stroke": "#c74634"
+      },
+      "id": "s_mqwnfsng_i"
+    },
+    {
+      "type": "cloud-loadbalancer",
+      "x": 640,
+      "y": 360,
+      "w": 110,
+      "h": 80,
+      "text": "Error\nNotification",
+      "style": {
+        "fill": "#fde4e2",
+        "stroke": "#d1453b"
+      },
+      "id": "s_mqwnfsng_j"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "c_mqwnfsng_k",
+      "from": {
+        "shapeId": "s_mqwnfsng_d",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsng_l",
+      "from": {
+        "shapeId": "s_mqwnfsng_e",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsng_m",
+      "from": {
+        "shapeId": "s_mqwnfsng_h",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsng_n",
+      "from": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_g",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsng_o",
+      "from": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_i",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsng_p",
+      "from": {
+        "shapeId": "s_mqwnfsng_f",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsng_j",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "on error",
+      "style": {
+        "strokeStyle": "dashed",
+        "stroke": "#d1453b"
+      }
+    }
+  ]
+}

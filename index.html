@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="description" content="Enterprise Diagram Designer — a professional, browser-based diagramming tool rivaling Visio, Lucidchart and draw.io. No server, no build, no install." />
+  <meta name="theme-color" content="#1f6feb" />
+  <title>Enterprise Diagram Designer</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/icons/app-icon.svg" type="image/svg+xml" />
+
+  <link rel="stylesheet" href="css/theme.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+  <!-- ============================ TOP BAR ============================ -->
+  <header id="topbar" class="topbar" role="banner">
+    <div class="topbar__brand">
+      <svg class="brand__logo" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <rect x="2" y="3" width="9" height="7" rx="1.5"></rect>
+        <rect x="13" y="3" width="9" height="7" rx="1.5"></rect>
+        <rect x="7.5" y="14" width="9" height="7" rx="1.5"></rect>
+        <path d="M6.5 10 L6.5 14 M17.5 10 L12 14" class="brand__link"></path>
+      </svg>
+      <span class="brand__name">Diagram&nbsp;Designer</span>
+    </div>
+
+    <nav class="topbar__menu" aria-label="Application menu">
+      <button class="menu__item" data-menu="file">File</button>
+      <button class="menu__item" data-menu="edit">Edit</button>
+      <button class="menu__item" data-menu="view">View</button>
+      <button class="menu__item" data-menu="arrange">Arrange</button>
+      <button class="menu__item" data-menu="help">Help</button>
+    </nav>
+
+    <div class="topbar__doc">
+      <input id="docName" class="doc__name" value="Untitled Diagram" aria-label="Document name" />
+      <span id="saveStatus" class="doc__status" title="Save status">Saved</span>
+    </div>
+
+    <div class="topbar__actions">
+      <button class="btn btn--ghost" id="btnTheme" title="Cycle theme (T)">🎨 Theme</button>
+      <button class="btn btn--ghost" id="btnCommand" title="Command palette (Ctrl+K)">⌘ Command</button>
+      <button class="btn btn--primary" id="btnExport" title="Export (Ctrl+E)">Export ▾</button>
+    </div>
+  </header>
+
+  <!-- ============================ TOOLBAR ============================ -->
+  <div id="toolbar" class="toolbar" role="toolbar" aria-label="Drawing tools"></div>
+
+  <!-- ============================ MAIN ============================ -->
+  <main id="workspace" class="workspace">
+    <!-- LEFT: shape library -->
+    <aside id="sidebar" class="sidebar sidebar--left" aria-label="Shape library">
+      <div class="sidebar__search">
+        <input id="shapeSearch" type="search" placeholder="Search shapes…" aria-label="Search shapes" />
+      </div>
+      <div id="shapePalette" class="palette"></div>
+    </aside>
+
+    <!-- CENTER: canvas -->
+    <section id="canvasHost" class="canvas-host" aria-label="Drawing canvas">
+      <svg id="canvas" class="canvas" tabindex="0" aria-label="Diagram canvas">
+        <defs id="canvasDefs"></defs>
+        <rect id="gridBg" class="canvas__grid" x="-100000" y="-100000" width="200000" height="200000"></rect>
+        <g id="viewport" class="canvas__viewport">
+          <g id="layerConnectors"></g>
+          <g id="layerShapes"></g>
+          <g id="layerOverlay"></g>
+        </g>
+      </svg>
+
+      <!-- Floating zoom controls -->
+      <div class="zoombar" role="group" aria-label="Zoom controls">
+        <button class="zoombar__btn" id="zoomOut" title="Zoom out">−</button>
+        <button class="zoombar__btn zoombar__level" id="zoomLevel" title="Reset zoom">100%</button>
+        <button class="zoombar__btn" id="zoomIn" title="Zoom in">+</button>
+        <button class="zoombar__btn" id="zoomFit" title="Fit to screen (Home)">⤢</button>
+      </div>
+
+      <!-- Minimap -->
+      <div class="minimap" id="minimap" aria-label="Minimap">
+        <svg id="minimapSvg" viewBox="0 0 200 140" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="minimap__view" id="minimapView"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: properties + layers -->
+    <aside id="inspector" class="sidebar sidebar--right" aria-label="Inspector">
+      <div class="inspector__tabs" role="tablist">
+        <button class="tab tab--active" data-tab="properties" role="tab">Properties</button>
+        <button class="tab" data-tab="layers" role="tab">Layers</button>
+        <button class="tab" data-tab="document" role="tab">Document</button>
+      </div>
+      <div class="inspector__body">
+        <div id="panelProperties" class="panel panel--active"></div>
+        <div id="panelLayers" class="panel"></div>
+        <div id="panelDocument" class="panel"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============================ STATUS BAR ============================ -->
+  <footer id="statusbar" class="statusbar" role="contentinfo">
+    <span id="statusSelection">No selection</span>
+    <span class="statusbar__spacer"></span>
+    <span id="statusPointer">0, 0</span>
+    <span id="statusObjects">0 objects</span>
+  </footer>
+
+  <!-- ============================ OVERLAYS ============================ -->
+  <div id="contextMenu" class="context-menu" role="menu" hidden></div>
+  <div id="dropdown" class="dropdown" hidden></div>
+  <div id="commandPalette" class="command-palette" hidden>
+    <input id="commandInput" placeholder="Type a command…" aria-label="Command palette" />
+    <ul id="commandList" class="command-palette__list"></ul>
+  </div>
+  <div id="modalHost" class="modal-host" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- Hidden file input for imports -->
+  <input type="file" id="fileInput" hidden
+         accept=".json,.svg,.xml,.drawio,application/json,image/svg+xml" />
+
+  <!-- ============================ SCRIPTS ============================ -->
+  <!-- Loaded as ordered classic scripts so the app runs from file:// with no
+       build step or local server (browsers block ES-module imports over file://).
+       Each module attaches to the global `DD` namespace. -->
+  <script src="js/utils.js"></script>
+  <script src="js/eventbus.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/history.js"></script>
+  <script src="js/shapes.js"></script>
+  <script src="js/connectors.js"></script>
+  <script src="js/canvas.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/toolbar.js"></script>
+  <script src="js/properties.js"></script>
+  <script src="js/layers.js"></script>
+  <script src="js/templates.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/import.js"></script>
+  <script src="js/shortcuts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

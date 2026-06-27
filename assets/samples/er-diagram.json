@@ -1,0 +1,120 @@
+{
+  "id": "doc_mqwnfrt3_0",
+  "name": "ER Diagram",
+  "created": 1782582235527,
+  "modified": 1782582236660,
+  "schema": 1,
+  "settings": {
+    "gridType": "dot",
+    "gridSize": 20,
+    "snap": true,
+    "snapTolerance": 6,
+    "smartGuides": true,
+    "theme": "light",
+    "background": "#fbfcfe",
+    "pageWidth": 1654,
+    "pageHeight": 1169,
+    "showPage": false
+  },
+  "layers": [
+    {
+      "id": "layer_mqwnfrt3_1",
+      "name": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "opacity": 1
+    }
+  ],
+  "shapes": [
+    {
+      "type": "erd-table",
+      "x": 80,
+      "y": 80,
+      "w": 170,
+      "h": 110,
+      "text": "CUSTOMERS\nid PK\nname\nemail",
+      "style": {},
+      "id": "s_mqwnfsoj_1o"
+    },
+    {
+      "type": "erd-table",
+      "x": 380,
+      "y": 80,
+      "w": 170,
+      "h": 110,
+      "text": "ORDERS\nid PK\ncustomer_id FK\ntotal",
+      "style": {},
+      "id": "s_mqwnfsoj_1p"
+    },
+    {
+      "type": "erd-table",
+      "x": 380,
+      "y": 280,
+      "w": 170,
+      "h": 110,
+      "text": "ORDER_ITEMS\nid PK\norder_id FK\nproduct_id FK",
+      "style": {},
+      "id": "s_mqwnfsoj_1q"
+    },
+    {
+      "type": "erd-table",
+      "x": 80,
+      "y": 280,
+      "w": 170,
+      "h": 110,
+      "text": "PRODUCTS\nid PK\nname\nprice",
+      "style": {},
+      "id": "s_mqwnfsoj_1r"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "c_mqwnfsoj_1s",
+      "from": {
+        "shapeId": "s_mqwnfsoj_1o",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsoj_1p",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "many",
+      "arrowStart": "one",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsoj_1t",
+      "from": {
+        "shapeId": "s_mqwnfsoj_1p",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsoj_1q",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "many",
+      "arrowStart": "one",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsoj_1u",
+      "from": {
+        "shapeId": "s_mqwnfsoj_1r",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsoj_1q",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "many",
+      "arrowStart": "one",
+      "label": "",
+      "style": {}
+    }
+  ]
+}

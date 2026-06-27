@@ -1,0 +1,346 @@
+{
+  "id": "doc_mqwnfrt3_0",
+  "name": "Oracle EBS — AP Invoice Flow",
+  "created": 1782582235527,
+  "modified": 1782582236636,
+  "schema": 1,
+  "settings": {
+    "gridType": "dot",
+    "gridSize": 20,
+    "snap": true,
+    "snapTolerance": 6,
+    "smartGuides": true,
+    "theme": "light",
+    "background": "#fbfcfe",
+    "pageWidth": 1654,
+    "pageHeight": 1169,
+    "showPage": false
+  },
+  "layers": [
+    {
+      "id": "layer_mqwnfrt3_1",
+      "name": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "opacity": 1
+    }
+  ],
+  "shapes": [
+    {
+      "type": "fc-start",
+      "x": 380,
+      "y": 30,
+      "w": 120,
+      "h": 56,
+      "text": "Invoice Received",
+      "style": {
+        "fill": "#fce8e6",
+        "stroke": "#c74634"
+      },
+      "id": "s_mqwnfsnv_q"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 130,
+      "w": 130,
+      "h": 64,
+      "text": "Enter Invoice (AP)",
+      "style": {},
+      "id": "s_mqwnfsnv_r"
+    },
+    {
+      "type": "fc-decision",
+      "x": 370,
+      "y": 235,
+      "w": 120,
+      "h": 90,
+      "text": "PO Match?",
+      "style": {
+        "fill": "#fff4d6",
+        "stroke": "#c8861a"
+      },
+      "id": "s_mqwnfsnv_s"
+    },
+    {
+      "type": "fc-process",
+      "x": 130,
+      "y": 235,
+      "w": 130,
+      "h": 64,
+      "text": "3-Way Match\nto PO/Receipt",
+      "style": {},
+      "id": "s_mqwnfsnv_t"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 375,
+      "w": 130,
+      "h": 64,
+      "text": "Invoice Validation",
+      "style": {},
+      "id": "s_mqwnfsnv_u"
+    },
+    {
+      "type": "fc-decision",
+      "x": 370,
+      "y": 480,
+      "w": 120,
+      "h": 90,
+      "text": "Holds?",
+      "style": {
+        "fill": "#fff4d6",
+        "stroke": "#c8861a"
+      },
+      "id": "s_mqwnfsnv_v"
+    },
+    {
+      "type": "fc-process",
+      "x": 620,
+      "y": 480,
+      "w": 130,
+      "h": 64,
+      "text": "Resolve Holds",
+      "style": {},
+      "id": "s_mqwnfsnv_w"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 615,
+      "w": 130,
+      "h": 64,
+      "text": "Invoice Approval\n(AME Workflow)",
+      "style": {},
+      "id": "s_mqwnfsnv_x"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 715,
+      "w": 130,
+      "h": 64,
+      "text": "Create Accounting",
+      "style": {},
+      "id": "s_mqwnfsnv_y"
+    },
+    {
+      "type": "fc-process",
+      "x": 360,
+      "y": 815,
+      "w": 130,
+      "h": 64,
+      "text": "Payment (AP)",
+      "style": {},
+      "id": "s_mqwnfsnv_z"
+    },
+    {
+      "type": "cloud-oracleebs",
+      "x": 360,
+      "y": 915,
+      "w": 110,
+      "h": 80,
+      "text": "Transfer to GL",
+      "style": {
+        "fill": "#fce8e6",
+        "stroke": "#c74634"
+      },
+      "id": "s_mqwnfsnv_10"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "c_mqwnfsnv_11",
+      "from": {
+        "shapeId": "s_mqwnfsnv_q",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_r",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_12",
+      "from": {
+        "shapeId": "s_mqwnfsnv_r",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_s",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_13",
+      "from": {
+        "shapeId": "s_mqwnfsnv_s",
+        "port": "w"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_t",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "Yes",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_14",
+      "from": {
+        "shapeId": "s_mqwnfsnv_t",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_u",
+        "port": "w"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_15",
+      "from": {
+        "shapeId": "s_mqwnfsnv_s",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_u",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "No",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_16",
+      "from": {
+        "shapeId": "s_mqwnfsnv_u",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_v",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_17",
+      "from": {
+        "shapeId": "s_mqwnfsnv_v",
+        "port": "e"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_w",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "Yes",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_18",
+      "from": {
+        "shapeId": "s_mqwnfsnv_w",
+        "port": "n"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_u",
+        "port": "e"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_19",
+      "from": {
+        "shapeId": "s_mqwnfsnv_v",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_x",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "No",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_1a",
+      "from": {
+        "shapeId": "s_mqwnfsnv_x",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_y",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_1b",
+      "from": {
+        "shapeId": "s_mqwnfsnv_y",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_z",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfsnv_1c",
+      "from": {
+        "shapeId": "s_mqwnfsnv_z",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfsnv_10",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    }
+  ]
+}

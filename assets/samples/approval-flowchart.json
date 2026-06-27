@@ -1,0 +1,184 @@
+{
+  "id": "doc_mqwnfrt3_0",
+  "name": "Approval Flowchart",
+  "created": 1782582235527,
+  "modified": 1782582236649,
+  "schema": 1,
+  "settings": {
+    "gridType": "dot",
+    "gridSize": 20,
+    "snap": true,
+    "snapTolerance": 6,
+    "smartGuides": true,
+    "theme": "light",
+    "background": "#fbfcfe",
+    "pageWidth": 1654,
+    "pageHeight": 1169,
+    "showPage": false
+  },
+  "layers": [
+    {
+      "id": "layer_mqwnfrt3_1",
+      "name": "Layer 1",
+      "visible": true,
+      "locked": false,
+      "opacity": 1
+    }
+  ],
+  "shapes": [
+    {
+      "type": "fc-start",
+      "x": 360,
+      "y": 40,
+      "w": 120,
+      "h": 56,
+      "text": "Start",
+      "style": {
+        "fill": "#e3f5e9",
+        "stroke": "#1f9d57"
+      },
+      "id": "s_mqwnfso9_1d"
+    },
+    {
+      "type": "fc-process",
+      "x": 350,
+      "y": 140,
+      "w": 130,
+      "h": 64,
+      "text": "Submit Request",
+      "style": {},
+      "id": "s_mqwnfso9_1e"
+    },
+    {
+      "type": "fc-decision",
+      "x": 360,
+      "y": 250,
+      "w": 120,
+      "h": 90,
+      "text": "Approved?",
+      "style": {
+        "fill": "#fff4d6",
+        "stroke": "#c8861a"
+      },
+      "id": "s_mqwnfso9_1f"
+    },
+    {
+      "type": "fc-process",
+      "x": 350,
+      "y": 390,
+      "w": 130,
+      "h": 64,
+      "text": "Process Order",
+      "style": {},
+      "id": "s_mqwnfso9_1g"
+    },
+    {
+      "type": "fc-process",
+      "x": 130,
+      "y": 250,
+      "w": 130,
+      "h": 64,
+      "text": "Notify Rejection",
+      "style": {
+        "fill": "#fde4e2",
+        "stroke": "#d1453b"
+      },
+      "id": "s_mqwnfso9_1h"
+    },
+    {
+      "type": "fc-start",
+      "x": 360,
+      "y": 500,
+      "w": 120,
+      "h": 56,
+      "text": "End",
+      "style": {
+        "fill": "#e3f5e9",
+        "stroke": "#1f9d57"
+      },
+      "id": "s_mqwnfso9_1i"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "c_mqwnfso9_1j",
+      "from": {
+        "shapeId": "s_mqwnfso9_1d",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfso9_1e",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfso9_1k",
+      "from": {
+        "shapeId": "s_mqwnfso9_1e",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfso9_1f",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfso9_1l",
+      "from": {
+        "shapeId": "s_mqwnfso9_1f",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfso9_1g",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "Yes",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfso9_1m",
+      "from": {
+        "shapeId": "s_mqwnfso9_1f",
+        "port": "w"
+      },
+      "to": {
+        "shapeId": "s_mqwnfso9_1h",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "No",
+      "style": {}
+    },
+    {
+      "id": "c_mqwnfso9_1n",
+      "from": {
+        "shapeId": "s_mqwnfso9_1g",
+        "port": "s"
+      },
+      "to": {
+        "shapeId": "s_mqwnfso9_1i",
+        "port": "n"
+      },
+      "routing": "orthogonal",
+      "arrowEnd": "filled",
+      "arrowStart": "none",
+      "label": "",
+      "style": {}
+    }
+  ]
+}

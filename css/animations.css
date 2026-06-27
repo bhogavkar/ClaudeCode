@@ -1,0 +1,36 @@
+/* =====================================================================
+   animations.css — Motion & transitions
+   ===================================================================== */
+
+@keyframes ddFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ddPopIn { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes ddSlideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes ddDash { to { stroke-dashoffset: -16; } }
+@keyframes ddSpin { to { transform: rotate(360deg); } }
+@keyframes ddToast { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.dropdown, .context-menu { animation: ddPopIn var(--dur) var(--ease); }
+.command-palette { animation: ddPopIn var(--dur) var(--ease); }
+.modal-host { animation: ddFadeIn var(--dur-fast) var(--ease); }
+.modal { animation: ddPopIn var(--dur) var(--ease); }
+.toast { animation: ddToast var(--dur) var(--ease); }
+.palette__item { animation: ddFadeIn var(--dur) var(--ease); }
+
+/* Animated connector flow */
+.connector-path.is-animated { stroke-dasharray: 8 6; animation: ddDash 1s linear infinite; }
+
+/* Selection pulse */
+.sel-outline { animation: ddDash 24s linear infinite; }
+
+/* Spinner */
+.spinner {
+  width: 18px; height: 18px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: ddSpin .7s linear infinite;
+}
+
+/* Drop target highlight */
+.canvas-host.drag-over::after {
+  content: ""; position: absolute; inset: 8px; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}

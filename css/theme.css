@@ -1,0 +1,169 @@
+/* =====================================================================
+   theme.css — Design tokens & theme variables
+   All colors/spacing flow through CSS custom properties so themes can be
+   swapped at runtime by setting [data-theme] on <html>.
+   ===================================================================== */
+
+:root {
+  /* Spacing scale */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px;
+
+  /* Radius */
+  --radius-sm: 4px; --radius-md: 6px; --radius-lg: 10px; --radius-xl: 14px;
+
+  /* Typography */
+  --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "Cascadia Code", "SF Mono", Consolas, monospace;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 18px;
+
+  /* Elevation */
+  --shadow-1: 0 1px 2px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.06);
+  --shadow-2: 0 2px 8px rgba(0,0,0,.12);
+  --shadow-3: 0 8px 28px rgba(0,0,0,.18);
+
+  /* Motion */
+  --ease: cubic-bezier(.22,.61,.36,1);
+  --dur-fast: 120ms; --dur: 200ms;
+
+  /* Layout sizing */
+  --topbar-h: 46px;
+  --toolbar-h: 42px;
+  --statusbar-h: 26px;
+  --sidebar-w: 248px;
+  --inspector-w: 286px;
+}
+
+/* ---------------------------- LIGHT (default) ---------------------------- */
+:root, [data-theme="light"] {
+  --bg-app: #f3f5f8;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #f7f9fc;
+  --bg-canvas: #fbfcfe;
+  --bg-hover: #eef2f7;
+  --bg-active: #e3ecfa;
+  --border: #d8dee8;
+  --border-strong: #b9c2d0;
+  --text: #1c2430;
+  --text-dim: #5b6675;
+  --text-faint: #8a94a3;
+  --accent: #1f6feb;
+  --accent-hover: #1a5fd0;
+  --accent-soft: #e3ecfa;
+  --danger: #d1453b;
+  --success: #1f9d57;
+  --warning: #c8861a;
+  --grid-line: #e4e9f0;
+  --grid-dot: #c9d2de;
+  --selection: #1f6feb;
+  --handle: #ffffff;
+  --handle-border: #1f6feb;
+}
+
+/* ---------------------------- DARK ---------------------------- */
+[data-theme="dark"] {
+  --bg-app: #0d1117;
+  --bg-panel: #161b22;
+  --bg-panel-2: #1c232d;
+  --bg-canvas: #0b0f15;
+  --bg-hover: #21262d;
+  --bg-active: #1f3454;
+  --border: #2a313c;
+  --border-strong: #3a434f;
+  --text: #e6edf3;
+  --text-dim: #9aa6b2;
+  --text-faint: #6b7682;
+  --accent: #4493f8;
+  --accent-hover: #58a0fb;
+  --accent-soft: #16314f;
+  --danger: #f0584d;
+  --success: #3fb950;
+  --warning: #d29922;
+  --grid-line: #1b222c;
+  --grid-dot: #2a313c;
+  --selection: #4493f8;
+  --handle: #161b22;
+  --handle-border: #4493f8;
+}
+
+/* ---------------------------- ORACLE ---------------------------- */
+[data-theme="oracle"] {
+  --bg-app: #f4f2ee;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #faf8f4;
+  --bg-canvas: #fffefb;
+  --bg-hover: #f0ece4;
+  --bg-active: #fce8e6;
+  --border: #ddd6c9;
+  --border-strong: #c4baa6;
+  --text: #312d26;
+  --text-dim: #6b6456;
+  --text-faint: #968d7c;
+  --accent: #c74634;       /* Oracle red */
+  --accent-hover: #a93a2b;
+  --accent-soft: #fce8e6;
+  --danger: #c74634;
+  --success: #3a7d44;
+  --warning: #b07d2b;
+  --grid-line: #ece7dd;
+  --grid-dot: #d6cdbd;
+  --selection: #c74634;
+  --handle: #ffffff;
+  --handle-border: #c74634;
+}
+
+/* ---------------------------- MICROSOFT ---------------------------- */
+[data-theme="microsoft"] {
+  --bg-app: #eef1f5;
+  --bg-panel: #ffffff;
+  --bg-panel-2: #f5f7fa;
+  --bg-canvas: #ffffff;
+  --bg-hover: #e8edf3;
+  --bg-active: #deecf9;
+  --border: #d3dae3;
+  --border-strong: #b0bac6;
+  --text: #201f1e;
+  --text-dim: #605e5c;
+  --text-faint: #8a8886;
+  --accent: #0078d4;       /* Fluent blue */
+  --accent-hover: #106ebe;
+  --accent-soft: #deecf9;
+  --danger: #d13438;
+  --success: #107c10;
+  --warning: #c19c00;
+  --grid-line: #e6eaf0;
+  --grid-dot: #c8d0db;
+  --selection: #0078d4;
+  --handle: #ffffff;
+  --handle-border: #0078d4;
+}
+
+/* ---------------------------- HIGH CONTRAST ---------------------------- */
+[data-theme="contrast"] {
+  --bg-app: #000000;
+  --bg-panel: #000000;
+  --bg-panel-2: #0a0a0a;
+  --bg-canvas: #000000;
+  --bg-hover: #1a1a1a;
+  --bg-active: #003a6b;
+  --border: #ffffff;
+  --border-strong: #ffffff;
+  --text: #ffffff;
+  --text-dim: #ffff00;
+  --text-faint: #00ffff;
+  --accent: #ffff00;
+  --accent-hover: #ffd400;
+  --accent-soft: #003a6b;
+  --danger: #ff5050;
+  --success: #50ff7a;
+  --warning: #ffb000;
+  --grid-line: #2a2a2a;
+  --grid-dot: #404040;
+  --selection: #ffff00;
+  --handle: #000000;
+  --handle-border: #ffff00;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
