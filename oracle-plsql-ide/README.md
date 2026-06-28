@@ -20,8 +20,10 @@ python3 -m http.server 8080
 # …or simply open index.html directly in Chrome/Edge/Firefox
 ```
 
-The Monaco engine is loaded from a CDN on first run. If you need a **fully
-offline** install, vendor it locally (see *Offline install* below).
+The Monaco editor engine ships **vendored** in `vendor/monaco/` (TypeScript/CSS/
+HTML language services removed to keep it lean), so the IDE runs **fully offline
+with no CDN dependency**. The loader uses the local copy first and only falls
+back to a CDN if the vendored files are missing.
 
 ---
 
@@ -136,19 +138,17 @@ To make them real, add a small backend (e.g. Node + `oracledb`, or ORDS) and:
 2. Populate the Database Explorer from `ALL_OBJECTS` / `ALL_TAB_COLUMNS`.
 3. Point `window.AIConfig.endpoint` at an LLM service for richer AI.
 
-## Offline install
+## Offline / CDN
 
-The editor engine is fetched from a CDN (jsDelivr → cdnjs → unpkg, in order).
-For an air-gapped environment, vendor Monaco locally:
+Monaco is **already vendored** at `vendor/monaco/min/vs`, and the loader checks
+that path **first** — so the IDE runs with no network at all. If those files are
+ever removed, the loader falls back to CDNs (jsDelivr → cdnjs → unpkg); if none
+is reachable, a clear on-screen message explains how to restore it:
 
 ```bash
 npm pack monaco-editor@0.45.0
 # extract package/min/vs  →  oracle-plsql-ide/vendor/monaco/min/vs
 ```
-
-The loader checks `vendor/monaco/min/vs` **first**, so once present it runs with
-no network at all. If no source is reachable, a clear on-screen message explains
-how to fix it.
 
 ## Notes & limitations
 

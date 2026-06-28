@@ -11,6 +11,10 @@
   --mono: "SFMono-Regular", "JetBrains Mono", Consolas, "Courier New", monospace;
 }
 * { box-sizing: border-box; }
+/* The `hidden` attribute must always win, even over class rules that set
+   display (e.g. .csv-pane{display:flex}). Without this, the CSV overlay sits
+   on top of the editor and blocks both rendering and input. */
+[hidden] { display: none !important; }
 html, body { height: 100%; margin: 0; }
 body {
   display: flex; flex-direction: column; height: 100vh; overflow: hidden;
