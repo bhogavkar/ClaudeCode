@@ -7,7 +7,11 @@ Oracle Payables Open Interface tables (`AP_INVOICES_INTERFACE`, `AP_INVOICE_LINE
 
 > Design philosophy: keep the seeded `AP_WEB_EXPORT_ER` *derivation logic* (employee → person →
 > vendor → vendor site, create-supplier-if-missing, create-payee) but discard the seeded report
-> rendering, prepayment, credit-card and multi-source complexity. The result is a small, set-based,
+> rendering, prepayment, credit-card and multi-source complexity. The **validation and
+> error-staging method is modelled on the in-house `XXTJXAP_STND_INV_IMP_PKG`** framework:
+> one modular BOOLEAN function per check, each gated by a config toggle; all checks run per record
+> so every problem is reported in one pass; failures are accumulated into a collection and a
+> source-data error table while the staging row is flagged. The result is a small, set-based,
 > modular package that a new developer can read top-to-bottom in one sitting.
 
 ---
@@ -52,17 +56,22 @@ Oracle Payables Open Interface tables (`AP_INVOICES_INTERFACE`, `AP_INVOICE_LINE
    `PROCESS_STATUS = 'N'` and the file `Batch Id` stamped into `BATCH_ID`.
 2. (Optional) Asset-key derivation populates `ASSET_CATEGORY_ID` / asset key on the line staging.
 3. `import_expenses` is launched as a concurrent program. For each **NEW** header:
-   1. Validate Employee Number is present and exists in HR.
-   2. Validate / derive Operating Unit (`org_id`) — parameter if supplied, else file OU name.
-   3. Derive `person_id`, `full_name`, `party_id` resolving to a single active primary assignment.
-   4. Get the existing employee supplier + pay site for the OU; if none, **create** supplier + site + payee.
-   5. Bulk-collect the invoice’s lines.
-   6. Insert one `AP_INVOICES_INTERFACE` row + bulk-insert `AP_INVOICE_LINES_INTERFACE` rows.
-   7. Stamp staging `PROCESS_STATUS = 'T'` (transferred) or `'E'` (error + message).
-4. Commit per bulk batch; write a run-log summary row; set `errbuf`/`retcode`.
+   1. **Run every header validation** (mandatory fields, employee, currency, invoice type,
+      header-vs-line amount, operating unit) — failures are *accumulated*, not short-circuited.
+   2. Derive `org_id`, then `person_id` / `party_id` (single active primary assignment).
+   3. Get the existing employee supplier + pay site for the OU; if none, **create** supplier + site + payee.
+   4. Duplicate-invoice check (within batch + already in `ap_invoices_all` for the vendor).
+   5. Bulk-collect the invoice’s lines and validate each line type.
+   6. **Only if the record is clean**, insert one `AP_INVOICES_INTERFACE` row + bulk-insert
+      `AP_INVOICE_LINES_INTERFACE` rows and stamp staging `PROCESS_STATUS = 'T'`.
+   7. Otherwise every failure was staged via `stage_inv_error` (in-memory collection +
+      `PROCESS_STATUS='E'` + `ERROR_MESSAGE`).
+4. Per bulk batch: `flush_errors` bulk-inserts the collection into `XXTJX_WD_EXP_AP_ERRORS`, then commit.
+5. Write a run-log summary row; set `errbuf`/`retcode`.
 
-A record that fails any step is marked `'E'` with a meaningful message and the loop continues —
-one bad expense report never aborts the run.
+A record that fails any check is flagged `'E'` with **all** its failure reasons and the loop
+continues — one bad expense report never aborts the run. Only a missing mandatory **Source
+parameter** stops the program up front (critical error).
 
 ---
 
@@ -101,20 +110,33 @@ See `02_XXTJX_WD_EXP_AP_IMPORT_PKG.pks`. Public surface:
 
 ```
 XXTJX_WD_EXP_AP_IMPORT_PKG (body)
-├── Constants & run-time globals
-├── debug / log_line / out_line          -- logging helpers
-├── write_run_log            (AUTONOMOUS) -- statistics row
-├── mark_record                           -- stamp staging status/error
+├── Constants, validation toggles (g_chk_*), run-time globals, error collection
+├── debug / log_line / out_line           -- logging helpers
+├── load_config              (private)    -- load validation toggles per source
+├── stage_inv_error          (private)    -- accumulate failure + flag staging
+├── flush_errors             (private)    -- FORALL → XXTJX_WD_EXP_AP_ERRORS
+├── mark_transferred         (private)    -- stamp staging 'T'
+├── validate_mandatory_fields             -- all required header fields
 ├── validate_employee_number
-├── derive_person_details
 ├── validate_operating_unit
+├── validate_invoice_currency
+├── validate_invoice_type
+├── validate_invoice_line_type
+├── validate_invoice_num                  -- dup-in-batch + dup-in-AP
+├── validate_invoice_amounts              -- header = Σ(lines)
+├── derive_person_details
 ├── get_employee_supplier
 ├── create_payee             (private)    -- IBY external payee
 ├── create_employee_supplier
 ├── insert_invoice_header    (private)    -- 1 row → AP_INVOICES_INTERFACE
 ├── insert_invoice_lines     (private)    -- FORALL → AP_INVOICE_LINES_INTERFACE
-└── import_expenses          (main)       -- orchestrates the above in sequence
+└── import_expenses          (main)       -- run-all-validations loop + transfer
+       └── fail()            (local)      -- one-call "flag + stage + report"
 ```
+
+Every `validate_*` function returns `BOOLEAN` and begins with `IF NVL(g_chk_x,'NO')<>'YES' THEN
+RETURN TRUE` — exactly the `XXTJXAP_STND_INV_IMP_PKG` toggle idiom — so any check can be switched
+off per source by `load_config` without touching the orchestration.
 
 ---
 
@@ -122,34 +144,50 @@ XXTJX_WD_EXP_AP_IMPORT_PKG (body)
 
 | Routine | Responsibility | Key inputs → outputs |
 |---|---|---|
-| `import_expenses` | Orchestrate; loop staging; commit; summarise. | params → errbuf/retcode |
-| `validate_employee_number` | Mandatory + existence check. | emp_no → bool/msg |
+| `import_expenses` | Orchestrate; run all validations; transfer clean records; commit; summarise. | params → errbuf/retcode |
+| `load_config` | Load validation toggles for the source (default ON). | source |
+| `validate_mandatory_fields` | All required header fields present (per file layout). | fields → bool/msg |
+| `validate_employee_number` | Employee present + known in HR. | emp_no → bool/msg |
+| `validate_operating_unit` | Resolve OU param/name → org_id and confirm active. | ou_name, org → org_id/msg |
+| `validate_invoice_currency` | Currency active/enabled. | curr → bool/msg |
+| `validate_invoice_type` | Invoice type lookup valid. | type → bool/msg |
+| `validate_invoice_line_type` | Line type lookup valid. | type → bool/msg |
+| `validate_invoice_num` | Dup within batch + dup already in `ap_invoices_all`. | inv,batch,vendor → bool/msg |
+| `validate_invoice_amounts` | Header amount = Σ(line amounts) within tolerance. | inv,batch,amt → bool/msg |
 | `derive_person_details` | Single active primary assignment → person/party. | emp_no, org → rec/msg |
-| `validate_operating_unit` | Resolve OU param/name → org_id. | ou_name, org → org_id/msg |
 | `get_employee_supplier` | Existing supplier (by party) + pay site (by OU). | party, org → vendor_rec |
 | `create_employee_supplier` | `AP_VENDOR_PUB_PKG` create vendor + site + payee. | emp_rec, org → vendor_rec |
 | `insert_invoice_header` | Map staging header → `AP_INVOICES_INTERFACE`. | hdr,vendor → invoice_id |
 | `insert_invoice_lines` | FORALL map staging lines → `AP_INVOICE_LINES_INTERFACE`. | lines, invoice_id |
-| `mark_record` | Update staging `PROCESS_STATUS` + `ERROR_MESSAGE`. | inv_num, batch, status |
-| `write_run_log` | Autonomous insert into `XXTJX_WD_EXP_AP_LOG`. | counts, timings |
+| `stage_inv_error` | Accumulate failure into collection + flag staging row(s). | source,inv,msg |
+| `flush_errors` | FORALL insert error collection → `XXTJX_WD_EXP_AP_ERRORS`. | (collection) |
+| `mark_transferred` | Stamp staging `PROCESS_STATUS='T'`. | inv_num, batch |
 
 ---
 
 ## 7. Validation Matrix
 
-| # | Validation | Rule | Error message |
-|---|---|---|---|
-| 1 | Source | Parameter not null | `Parameter Source is mandatory.` |
-| 2 | Employee Number present | Header value not null | `Missing mandatory field: Employee Number` |
-| 3 | Employee exists | Row in `per_all_people_f` effective today | `Employee not found in HR for Employee Number …` |
-| 4 | Operating Unit valid | `hr_operating_units` by param or file name | `Invalid Operating Unit …` / `Ambiguous …` |
-| 5 | Active assignment | ≥1 active primary effective assignment | `No active primary assignment found …` |
-| 6 | Single employee | Exactly one distinct person | `Multiple active employees found …` |
-| 7 | Vendor resolvable | Existing supplier OR create-flag = Y | `Vendor not found and "Create Employee as Supplier" is disabled` |
-| 8 | Vendor site | Pay site in OU OR created | `Vendor site creation failed …` |
-| 9 | Payee | IBY payee exists/created | `Payee creation failed …` |
-| 10 | Lines present | ≥1 NEW line for the invoice | `No lines found for invoice …` |
-| 11 | Payables periods/options | `ap_system_parameters_all` row exists | `No Payables system parameters for org_id …` |
+| # | Validation | Toggle | Rule | Error message |
+|---|---|---|---|---|
+| 0 | Source (critical) | — | Parameter not null | `Parameter Source is mandatory.` (stops run) |
+| 1 | Mandatory fields | `g_chk_mandatory` | Inv#/Date/Amount/Currency/Desc/Emp#/OU present | `Missing mandatory field(s): …` |
+| 2 | Employee exists | `g_chk_employee` | Row in `per_all_people_f` effective today | `Employee not found in HR …` |
+| 3 | Operating Unit valid | `g_chk_ou` | `hr_operating_units` by param/name, active dates | `Invalid Operating Unit …` / `Ambiguous …` |
+| 4 | Currency | `g_chk_currency` | Active, enabled in `fnd_currencies` | `Invalid or inactive currency: …` |
+| 5 | Invoice type | `g_chk_inv_type` | Valid `INVOICE TYPE` lookup | `Invalid invoice type lookup code: …` |
+| 6 | Line type | `g_chk_line_type` | Valid `INVOICE LINE TYPE` lookup | `Invalid invoice line type lookup code: …` |
+| 7 | Header = Σ lines | `g_chk_hdr_line_amt` | `|header − Σ(lines)| ≤ 0.01` | `Header amount (…) does not equal sum of line amounts (…)` |
+| 8 | Dup in batch | `g_chk_dup_batch` | inv# not repeated in staging batch | `Duplicate invoice number within batch: …` |
+| 9 | Dup in Payables | `g_chk_dup_exists` | inv# not already in `ap_invoices_all` for vendor | `Invoice number already exists in Payables: …` |
+| 10 | Active assignment | — | ≥1 active primary effective assignment | `No active primary assignment found …` |
+| 11 | Single employee | — | Exactly one distinct person | `Multiple active employees found …` |
+| 12 | Vendor resolvable | — | Existing supplier OR create-flag = Y | `Vendor not found and "Create Employee as Supplier" is disabled` |
+| 13 | Vendor site / payee | — | Pay site in OU + IBY payee (created if needed) | `Vendor site creation failed …` / `Payee creation failed …` |
+| 14 | Lines present | — | ≥1 NEW line for the invoice | `No lines found for invoice …` |
+
+All record-level checks run in a single pass; a record accumulates **every** reason it failed
+before being flagged `'E'`. Each toggle defaults to `'YES'` in `load_config` and can be wired to a
+setup lookup to enable/disable a check per source without code changes.
 
 ---
 
@@ -234,16 +272,20 @@ IBY_EXTERNAL_PAYEES_ALL exists?  no → IBY_DISBURSEMENT_SETUP_PUB.Create_Extern
 
 ## 11. Exception Handling Framework
 
-* **Per-record isolation** — each invoice runs inside its own block; failures are caught, the record
-  is flagged `'E'` with a message, and processing continues.
-* **Typed, meaningful messages** — every validation returns a human-readable reason (see §7), stored
-  in `ERROR_MESSAGE` on **both** the header and its lines and echoed to the concurrent OUTPUT.
-* **Custom error numbers** — `-20001..-20005` map to employee / OU / person / vendor / lines so the
-  failing stage is obvious from the message.
+* **Accumulate, don’t short-circuit** — all checks run for each record; `stage_inv_error` records
+  each failure (with an `ERROR_CODE` such as `MANDATORY`, `CURRENCY`, `HDR_LINE_AMT`, `DUP_INV`)
+  into the in-memory `gt_errors` collection and flags the staging row(s). The user sees every reason
+  a record was rejected, not just the first.
+* **Per-record isolation** — each invoice runs inside its own block; an unexpected error is caught,
+  staged as `UNEXPECTED`, and processing continues with the next record.
+* **Critical vs record-level** — a missing **Source** parameter is a critical error that stops the
+  run up front; data problems are always record-level.
+* **Two error sinks** — `ERROR_MESSAGE` on the header + its lines (for the source system) **and**
+  `XXTJX_WD_EXP_AP_ERRORS` (one row per failure, bulk-inserted by `flush_errors`).
 * **Fatal guard** — the outer `WHEN OTHERS` rolls back the current batch, logs
-  `DBMS_UTILITY.format_error_backtrace`, writes a `FATAL` run-log row, and returns `retcode = 2`.
-* **Logging never breaks the run** — `write_run_log` is `AUTONOMOUS_TRANSACTION` and swallows its own
-  errors.
+  `DBMS_UTILITY.format_error_backtrace`, and returns `retcode = 2`.
+* **Logging never breaks the run** — the run-log insert is `AUTONOMOUS_TRANSACTION` and swallows its
+  own errors.
 
 ---
 
@@ -258,6 +300,8 @@ Two complementary, lightweight channels (Oracle-standard, no heavyweight framewo
 2. **`XXTJX_WD_EXP_AP_LOG` table** (autonomous) capturing exactly the requested fields:
    Request Id, Module Name, Procedure Name, Source, Batch, Record Count, Success Count,
    Failure Count, Start/End Time, **Processing Time** (elapsed seconds), Status, Message.
+3. **`XXTJX_WD_EXP_AP_ERRORS` table** — one row per validation failure (Request Id, Batch, Source,
+   Invoice#, Vendor#, Employee#, Line#, Error Code, Error Msg) for easy reporting / re-work.
 
 > The package is decoupled from `xxtjx_audit_pkg`; if standardised auditing is preferred, the three
 > `log_line/out_line/write_run_log` helpers are the single place to redirect.
@@ -296,10 +340,16 @@ Two complementary, lightweight channels (Oracle-standard, no heavyweight framewo
    invalid/disabled combinations and **closed GL periods** before transfer (the “On Periods” check).
 3. **Auto-submit Payables Import** — optional `p_submit_import='Y'` parameter to chain
    `AP_IMPORT_INVOICES_PKG` after a successful load (kept out of scope today by design).
-4. **Header/line amount reconciliation** — assert Σ(line amount) = header amount before transfer.
-5. **Duplicate-invoice guard** — pre-check `INVOICE_NUM` against `ap_invoices_all` for the vendor.
-6. **Parameterised supplier site code** (HOME vs OFFICE) driven by a Workday reimbursement-type field.
+4. **Externalise validation toggles** — point `load_config` at a setup lookup/table (the
+   `XXTJXAP_STND_INV_IMP_PKG` uses an XML definition per source) so checks are config-driven.
+5. **Parameterised supplier site code** (HOME vs OFFICE) driven by a Workday reimbursement-type field.
+6. **Email error notification** — mail `XXTJX_WD_EXP_AP_ERRORS` for a batch (the standard package
+   has `EmailErrors` config; the hook points are already here).
 7. **`xxtjx_audit_pkg` integration** for enterprise-standard audit/notification.
+
+> Already implemented from the standard-package method: header-vs-line amount reconciliation,
+> duplicate-invoice guard (in-batch + in-Payables), and currency / invoice-type / line-type lookup
+> validation.
 
 ---
 
@@ -307,7 +357,7 @@ Two complementary, lightweight channels (Oracle-standard, no heavyweight framewo
 
 | File | Description |
 |---|---|
-| `01_XXTJX_WD_EXP_AP_STG_TABLES.sql` | Staging/replica tables, run-log table, sequence |
+| `01_XXTJX_WD_EXP_AP_STG_TABLES.sql` | Staging/replica tables, run-log table, error table, sequence |
 | `02_XXTJX_WD_EXP_AP_IMPORT_PKG.pks` | Package specification |
 | `03_XXTJX_WD_EXP_AP_IMPORT_PKG.pkb` | Package body |
 | `README_Workday_AP_Interface_Design.md` | This design document |

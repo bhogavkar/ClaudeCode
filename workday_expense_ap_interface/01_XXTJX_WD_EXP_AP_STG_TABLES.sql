@@ -169,7 +169,30 @@ CREATE TABLE XXTJX_WD_EXP_AP_LOG
 /
 
 ----------------------------------------------------------------------------
--- 4. SEQUENCE  (log id + surrogate keys)
+-- 4. SOURCE-DATA ERROR TABLE
+--    Mirrors the XXTJXAP_STND_INV_IMP_PKG "source_data_errors" concept:
+--    one row per failed validation, bulk-inserted at the end of the run.
+----------------------------------------------------------------------------
+CREATE TABLE XXTJX_WD_EXP_AP_ERRORS
+(
+    REQUEST_ID        NUMBER
+   ,BATCH_ID          VARCHAR2(20)
+   ,SOURCE            VARCHAR2(80)
+   ,INVOICE_ID        NUMBER
+   ,INVOICE_NUM       VARCHAR2(50)
+   ,VENDOR_NUM        VARCHAR2(30)
+   ,EMPLOYEE_NUMBER   VARCHAR2(30)
+   ,INVOICE_LINE_NUM  NUMBER
+   ,ERROR_CODE        VARCHAR2(100)
+   ,ERROR_MSG         VARCHAR2(1000)
+   ,CREATION_DATE     DATE DEFAULT SYSDATE
+)
+/
+
+COMMENT ON TABLE XXTJX_WD_EXP_AP_ERRORS IS 'One row per Workday expense validation failure (source data errors)';
+
+----------------------------------------------------------------------------
+-- 5. SEQUENCE  (log id + surrogate keys)
 ----------------------------------------------------------------------------
 CREATE SEQUENCE XXTJX_WD_EXP_AP_LOG_S START WITH 1 INCREMENT BY 1 NOCACHE
 /
@@ -180,5 +203,6 @@ CREATE SEQUENCE XXTJX_WD_EXP_AP_LOG_S START WITH 1 INCREMENT BY 1 NOCACHE
 -- GRANT ALL ON XXTJX_AP_INVOICES_INTERFACE  TO APPS;
 -- GRANT ALL ON XXTJX_AP_INV_LINES_INTERFACE TO APPS;
 -- GRANT ALL ON XXTJX_WD_EXP_AP_LOG          TO APPS;
+-- GRANT ALL ON XXTJX_WD_EXP_AP_ERRORS       TO APPS;
 -- GRANT ALL ON XXTJX_WD_EXP_AP_LOG_S        TO APPS;
 -- (Create matching public/APPS synonyms per your standards.)

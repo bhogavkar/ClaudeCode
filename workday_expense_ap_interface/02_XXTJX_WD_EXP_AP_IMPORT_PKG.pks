@@ -18,21 +18,30 @@ AS
    *   The package does NOT submit Payables Open Interface Import, create
    *   invoices, approve, or run workflow.
    *
-   *   Design follows the seeded AP_WEB_EXPORT_ER philosophy (employee ->
-   *   person -> vendor -> vendor site derivation, create-supplier-if-missing)
-   *   but in a much simpler, modular, set-based form tailored to Workday.
+   *   Validation / error-staging method follows XXTJXAP_STND_INV_IMP_PKG:
+   *     - one modular BOOLEAN validation function per check, each guarded by a
+   *       config toggle so checks can be turned on/off per source;
+   *     - all validations are run for a record (errors are accumulated, not
+   *       short-circuited) so every problem is reported in one pass;
+   *     - failures are captured in an in-memory collection AND stamped on the
+   *       staging row, then bulk-inserted into XXTJX_WD_EXP_AP_ERRORS.
+   *   Employee -> person -> vendor -> site derivation follows the seeded
+   *   AP_WEB_EXPORT_ER (GetVendorInfo / CreatePayee) approach, simplified for
+   *   Workday (employee suppliers only).
    *
    * HISTORY
    * =======
    * VERSION DATE        AUTHOR(S)            DESCRIPTION
    * ------- ----------- -------------------- ---------------------------------
    * 1.0     2026-06-28  EBS Tech Architect   Initial version.
+   * 2.0     2026-06-28  EBS Tech Architect   Reworked validation + error
+   *                                          staging to follow the
+   *                                          XXTJXAP_STND_INV_IMP_PKG method.
    *************************************************************************/
 
    --------------------------------------------------------------------------
-   -- PUBLIC RECORD TYPES
+   -- PUBLIC RECORD / COLLECTION TYPES
    --------------------------------------------------------------------------
-   -- Employee / person derivation result.
    TYPE employee_rec_type IS RECORD
    (
        person_id     per_all_people_f.person_id%TYPE
@@ -41,7 +50,6 @@ AS
       ,org_id        hr_operating_units.organization_id%TYPE
    );
 
-   -- Supplier / supplier-site derivation result.
    TYPE vendor_rec_type IS RECORD
    (
        vendor_id        ap_suppliers.vendor_id%TYPE
@@ -56,16 +64,31 @@ AS
       ,liab_acc         ap_suppliers.accts_pay_code_combination_id%TYPE
    );
 
+   -- Source-data error tracking (same shape as XXTJXAP_STND_INV_IMP_PKG).
+   TYPE source_data_error_rec IS RECORD
+   (
+       request_id        NUMBER
+      ,batch_id          VARCHAR2(20)
+      ,source            VARCHAR2(80)
+      ,invoice_id        NUMBER
+      ,invoice_num       VARCHAR2(50)
+      ,vendor_num        VARCHAR2(30)
+      ,employee_number   VARCHAR2(30)
+      ,invoice_line_num  NUMBER
+      ,error_code        VARCHAR2(100)
+      ,error_msg         VARCHAR2(1000)
+   );
+
+   TYPE source_data_error_tab IS TABLE OF source_data_error_rec
+      INDEX BY BINARY_INTEGER;
+
    --------------------------------------------------------------------------
    -- MAIN ENTRY POINT  (registered as a Concurrent Program executable)
    --------------------------------------------------------------------------
    -- p_source      (MANDATORY) AP interface SOURCE value, e.g. 'TJXWD_EXP US'
    -- p_org_id      (OPTIONAL)  Restrict processing to a single Operating Unit.
-   --                           When NULL the OU is derived per record from the
-   --                           file's Operating Unit Name (seeded behaviour).
    -- p_batch_name  (OPTIONAL)  Workday Batch Id to process. NULL => all New.
-   -- p_group_id    (OPTIONAL)  GROUP_ID stamped on AP interface rows so the
-   --                           subsequent Payables Import can be grouped.
+   -- p_group_id    (OPTIONAL)  GROUP_ID stamped on AP interface rows.
    -- p_debug_flag  (OPTIONAL)  'Y' enables verbose fnd_file.log output.
    PROCEDURE import_expenses
    (
@@ -79,30 +102,30 @@ AS
    );
 
    --------------------------------------------------------------------------
-   -- MODULAR VALIDATION / DERIVATION ROUTINES
-   -- Public so they can be unit-tested and reused independently.
+   -- MODULAR VALIDATION FUNCTIONS  (BOOLEAN; each internally honours a toggle)
    --------------------------------------------------------------------------
 
-   -- Validate that the employee number is present and known in HR.
+   -- All mandatory header/line fields present (driven by the WD file layout).
+   FUNCTION validate_mandatory_fields
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_invoice_date  IN  DATE
+      ,p_invoice_amt   IN  NUMBER
+      ,p_currency      IN  VARCHAR2
+      ,p_description    IN VARCHAR2
+      ,p_employee_num  IN  VARCHAR2
+      ,p_ou_name       IN  VARCHAR2
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   -- Employee number present and known in HR.
    FUNCTION validate_employee_number
    (
        p_employee_number IN  VARCHAR2
       ,x_error_message   OUT NOCOPY VARCHAR2
    ) RETURN BOOLEAN;
 
-   -- Derive person_id, full_name, party_id for an employee, resolving to a
-   -- single active, primary, in-OU assignment.  Returns FALSE (with a
-   -- meaningful message) when zero or many valid assignments remain.
-   FUNCTION derive_person_details
-   (
-       p_employee_number IN  VARCHAR2
-      ,p_org_id          IN  NUMBER
-      ,x_employee_rec    OUT NOCOPY employee_rec_type
-      ,x_error_message   OUT NOCOPY VARCHAR2
-   ) RETURN BOOLEAN;
-
-   -- Resolve an Operating Unit Name (from the file) to an org_id and confirm
-   -- the OU exists and is active.
+   -- Operating Unit (param wins, else file OU name) resolves to a valid org_id.
    FUNCTION validate_operating_unit
    (
        p_operating_unit_name IN  VARCHAR2
@@ -111,8 +134,57 @@ AS
       ,x_error_message       OUT NOCOPY VARCHAR2
    ) RETURN BOOLEAN;
 
-   -- Fetch the existing employee supplier + pay site for the OU.
-   -- Returns TRUE when a usable supplier+site was found.
+   -- Currency code active and enabled.
+   FUNCTION validate_invoice_currency
+   (
+       p_currency      IN  VARCHAR2
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   -- Invoice type lookup code valid (STANDARD).
+   FUNCTION validate_invoice_type
+   (
+       p_invoice_type_code IN  VARCHAR2
+      ,x_error_message     OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   -- Line type lookup code valid (ITEM).
+   FUNCTION validate_invoice_line_type
+   (
+       p_line_type_code IN  VARCHAR2
+      ,x_error_message  OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   -- Duplicate invoice number: same batch (staging) and/or already in AP.
+   FUNCTION validate_invoice_num
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_batch_id      IN  VARCHAR2
+      ,p_source        IN  VARCHAR2
+      ,p_vendor_id     IN  NUMBER
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   -- Header invoice amount = SUM(line amounts).
+   FUNCTION validate_invoice_amounts
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_batch_id      IN  VARCHAR2
+      ,p_header_amount IN  NUMBER
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
+   --------------------------------------------------------------------------
+   -- DERIVATION FUNCTIONS
+   --------------------------------------------------------------------------
+   FUNCTION derive_person_details
+   (
+       p_employee_number IN  VARCHAR2
+      ,p_org_id          IN  NUMBER
+      ,x_employee_rec    OUT NOCOPY employee_rec_type
+      ,x_error_message   OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN;
+
    FUNCTION get_employee_supplier
    (
        p_party_id      IN  NUMBER
@@ -121,8 +193,6 @@ AS
       ,x_error_message OUT NOCOPY VARCHAR2
    ) RETURN BOOLEAN;
 
-   -- Create employee supplier + pay site (+ IBY payee) when none exists,
-   -- following the seeded AP_VENDOR_PUB_PKG approach.
    FUNCTION create_employee_supplier
    (
        p_employee_rec  IN  employee_rec_type

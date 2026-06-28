@@ -7,13 +7,16 @@ AS
    *
    * DESCRIPTION
    *   Body for the Workday Expense -> Oracle AP Open Interface import.
-   *   See package specification header for scope.
+   *   Validation + error-staging method modelled on XXTJXAP_STND_INV_IMP_PKG.
    *
    * HISTORY
    * =======
    * VERSION DATE        AUTHOR(S)            DESCRIPTION
    * ------- ----------- -------------------- ---------------------------------
    * 1.0     2026-06-28  EBS Tech Architect   Initial version.
+   * 2.0     2026-06-28  EBS Tech Architect   Modular toggleable validations,
+   *                                          accumulate-all-errors loop, and
+   *                                          source-data error staging.
    *************************************************************************/
 
    --------------------------------------------------------------------------
@@ -22,23 +25,42 @@ AS
    g_module             CONSTANT VARCHAR2(40)  := 'XXTJX_WD_EXP_AP_IMPORT_PKG';
    g_inv_type_standard  CONSTANT VARCHAR2(25)  := 'STANDARD';
    g_line_type_item     CONSTANT VARCHAR2(25)  := 'ITEM';
-   g_status_new         CONSTANT VARCHAR2(1)   := 'N';
-   g_status_valid       CONSTANT VARCHAR2(1)   := 'V';
-   g_status_error       CONSTANT VARCHAR2(1)   := 'E';
-   g_status_transferred CONSTANT VARCHAR2(1)   := 'T';
+   g_status_new         CONSTANT VARCHAR2(1)   := 'N';   -- staging: not processed
+   g_status_error       CONSTANT VARCHAR2(1)   := 'E';   -- staging: failed validation
+   g_status_transferred CONSTANT VARCHAR2(1)   := 'T';   -- staging: pushed to AP interface
    g_vendor_type_emp    CONSTANT VARCHAR2(30)  := 'EMPLOYEE';
    g_bulk_limit         CONSTANT PLS_INTEGER   := 500;   -- BULK COLLECT batch size
+   g_amount_tolerance   CONSTANT NUMBER        := 0.01;  -- header vs line rounding
    g_ret_success        CONSTANT NUMBER        := 0;
    g_ret_warning        CONSTANT NUMBER        := 1;
    g_ret_error          CONSTANT NUMBER        := 2;
 
    --------------------------------------------------------------------------
-   -- GLOBAL RUN-TIME CONTEXT
+   -- VALIDATION CONFIG TOGGLES  (the XXTJXAP_STND_INV_IMP_PKG concept).
+   -- Each validation runs only when its flag = 'YES'.  Defaulted ON and
+   -- (re)loaded by load_config(); wire load_config to a setup lookup/table
+   -- to make checks configurable per source without code changes.
    --------------------------------------------------------------------------
-   g_debug          BOOLEAN       := FALSE;
-   g_request_id     NUMBER        := NVL (fnd_global.conc_request_id, -1);
-   g_user_id        NUMBER        := NVL (fnd_global.user_id, -1);
-   g_login_id       NUMBER        := NVL (fnd_global.login_id, -1);
+   g_chk_mandatory      VARCHAR2(3) := 'YES';
+   g_chk_employee       VARCHAR2(3) := 'YES';
+   g_chk_ou             VARCHAR2(3) := 'YES';
+   g_chk_currency       VARCHAR2(3) := 'YES';
+   g_chk_inv_type       VARCHAR2(3) := 'YES';
+   g_chk_line_type      VARCHAR2(3) := 'YES';
+   g_chk_dup_batch      VARCHAR2(3) := 'YES';   -- duplicate inv# within staging batch
+   g_chk_dup_exists     VARCHAR2(3) := 'YES';   -- duplicate inv# already in ap_invoices_all
+   g_chk_hdr_line_amt   VARCHAR2(3) := 'YES';
+
+   --------------------------------------------------------------------------
+   -- GLOBAL RUN-TIME CONTEXT + ERROR COLLECTION
+   --------------------------------------------------------------------------
+   g_debug          BOOLEAN := FALSE;
+   g_request_id     NUMBER  := NVL (fnd_global.conc_request_id, -1);
+   g_user_id        NUMBER  := NVL (fnd_global.user_id, -1);
+   g_login_id       NUMBER  := NVL (fnd_global.login_id, -1);
+
+   gt_errors        source_data_error_tab;          -- accumulated failures
+   gn_error_count   PLS_INTEGER := 0;
 
    --------------------------------------------------------------------------
    -- PRIVATE TYPES used for set-based line insert
@@ -47,100 +69,183 @@ AS
       INDEX BY PLS_INTEGER;
 
    ------------------------------------------------------------------------
-   -- PRIVATE: debug() - verbose log only when debug flag is on
+   -- PRIVATE logging helpers
    ------------------------------------------------------------------------
-   PROCEDURE debug (p_text IN VARCHAR2)
-   IS
+   PROCEDURE debug (p_text IN VARCHAR2) IS
    BEGIN
       IF g_debug THEN
          fnd_file.put_line (fnd_file.LOG, p_text);
       END IF;
    END debug;
 
-   ------------------------------------------------------------------------
-   -- PRIVATE: log_line() - always written to concurrent LOG
-   ------------------------------------------------------------------------
-   PROCEDURE log_line (p_text IN VARCHAR2)
-   IS
+   PROCEDURE log_line (p_text IN VARCHAR2) IS
    BEGIN
       fnd_file.put_line (fnd_file.LOG, p_text);
    END log_line;
 
-   ------------------------------------------------------------------------
-   -- PRIVATE: out_line() - written to concurrent OUTPUT (audit report)
-   ------------------------------------------------------------------------
-   PROCEDURE out_line (p_text IN VARCHAR2)
-   IS
+   PROCEDURE out_line (p_text IN VARCHAR2) IS
    BEGIN
       fnd_file.put_line (fnd_file.OUTPUT, p_text);
    END out_line;
 
    ------------------------------------------------------------------------
-   -- PRIVATE: write_run_log() - lightweight statistics row
+   -- PRIVATE: load_config()
+   --   Loads the validation toggles for a source.  Defaults are ON; replace
+   --   the body with a fnd_lookup_values / setup-table read to externalise.
    ------------------------------------------------------------------------
-   PROCEDURE write_run_log
-   (
-       p_proc        IN VARCHAR2
-      ,p_source      IN VARCHAR2
-      ,p_batch_id    IN VARCHAR2
-      ,p_total       IN NUMBER
-      ,p_success     IN NUMBER
-      ,p_failure     IN NUMBER
-      ,p_start       IN TIMESTAMP
-      ,p_status      IN VARCHAR2
-      ,p_message     IN VARCHAR2 DEFAULT NULL
-   )
+   PROCEDURE load_config (p_source IN VARCHAR2)
    IS
-      PRAGMA AUTONOMOUS_TRANSACTION;
-      l_end   TIMESTAMP := SYSTIMESTAMP;
    BEGIN
-      INSERT INTO XXTJX_WD_EXP_AP_LOG
-         (log_id, request_id, module_name, procedure_name, source, batch_id,
-          record_count, success_count, failure_count, start_time, end_time,
-          elapsed_seconds, status, message)
-      VALUES
-         (XXTJX_WD_EXP_AP_LOG_S.NEXTVAL, g_request_id, g_module, p_proc,
-          p_source, p_batch_id, p_total, p_success, p_failure, p_start, l_end,
-          ROUND (EXTRACT (SECOND FROM (l_end - p_start))
-                 + EXTRACT (MINUTE FROM (l_end - p_start)) * 60, 2),
-          p_status, p_message);
-      COMMIT;
-   EXCEPTION
-      WHEN OTHERS THEN
-         ROLLBACK;   -- logging must never break the run
-   END write_run_log;
+      -- Placeholder: defaults already set at package level.  Example wiring:
+      --   SELECT NVL(MAX(DECODE(lookup_code,'CHK_CURRENCY',meaning)),'YES'), ...
+      --     INTO g_chk_currency, ...
+      --     FROM fnd_lookup_values
+      --    WHERE lookup_type = 'XXTJX_WD_EXP_VAL_CONFIG' AND language = 'US';
+      log_line ('Validation config (source ' || p_source || '):');
+      log_line ('  Mandatory='        || g_chk_mandatory
+                || '  Employee='       || g_chk_employee
+                || '  OU='             || g_chk_ou
+                || '  Currency='       || g_chk_currency);
+      log_line ('  InvType='          || g_chk_inv_type
+                || '  LineType='       || g_chk_line_type
+                || '  DupBatch='       || g_chk_dup_batch
+                || '  DupExists='      || g_chk_dup_exists
+                || '  HdrVsLineAmt='   || g_chk_hdr_line_amt);
+   END load_config;
 
    ------------------------------------------------------------------------
-   -- PRIVATE: mark_record() - stamp staging header + its lines with status
+   -- PRIVATE: stage_inv_error()
+   --   Accumulate one validation failure into the in-memory collection and
+   --   flag the staging header + lines.  (XXTJXAP_STND_INV_IMP_PKG pattern.)
    ------------------------------------------------------------------------
-   PROCEDURE mark_record
+   PROCEDURE stage_inv_error
    (
-       p_invoice_num IN VARCHAR2
-      ,p_batch_id    IN VARCHAR2
-      ,p_status      IN VARCHAR2
-      ,p_message     IN VARCHAR2 DEFAULT NULL
+       p_source        IN VARCHAR2
+      ,p_batch_id      IN VARCHAR2
+      ,p_invoice_num   IN VARCHAR2
+      ,p_vendor_num    IN VARCHAR2
+      ,p_employee_num  IN VARCHAR2
+      ,p_line_num      IN NUMBER DEFAULT NULL
+      ,p_error_code    IN VARCHAR2
+      ,p_error_msg     IN VARCHAR2
    )
    IS
    BEGIN
+      gn_error_count := gn_error_count + 1;
+      gt_errors (gn_error_count).request_id       := g_request_id;
+      gt_errors (gn_error_count).batch_id          := p_batch_id;
+      gt_errors (gn_error_count).source            := p_source;
+      gt_errors (gn_error_count).invoice_num        := p_invoice_num;
+      gt_errors (gn_error_count).vendor_num          := p_vendor_num;
+      gt_errors (gn_error_count).employee_number     := p_employee_num;
+      gt_errors (gn_error_count).invoice_line_num     := p_line_num;
+      gt_errors (gn_error_count).error_code            := p_error_code;
+      gt_errors (gn_error_count).error_msg              := p_error_msg;
+
+      -- Stamp the staging row(s) so the source system can see the status.
       UPDATE XXTJX_AP_INVOICES_INTERFACE
-         SET process_status   = p_status
-            ,error_message    = p_message
+         SET process_status   = g_status_error
+            ,error_message    = SUBSTRB (p_error_msg, 1, 4000)
             ,last_update_date = SYSDATE
             ,last_updated_by  = g_user_id
        WHERE invoice_num = p_invoice_num
          AND batch_id    = p_batch_id;
 
       UPDATE XXTJX_AP_INV_LINES_INTERFACE
-         SET process_status   = p_status
-            ,error_message    = p_message
+         SET process_status   = g_status_error
+            ,error_message    = SUBSTRB (p_error_msg, 1, 4000)
             ,last_update_date = SYSDATE
             ,last_updated_by  = g_user_id
        WHERE invoice_num = p_invoice_num
-         AND batch_id    = p_batch_id;
-   END mark_record;
+         AND batch_id    = p_batch_id
+         AND (p_line_num IS NULL OR line_number = p_line_num);
+   END stage_inv_error;
 
    ------------------------------------------------------------------------
-   -- FUNCTION: validate_employee_number
+   -- PRIVATE: flush_errors()
+   --   Bulk-insert the accumulated error collection into the error table.
+   ------------------------------------------------------------------------
+   PROCEDURE flush_errors
+   IS
+   BEGIN
+      IF gn_error_count = 0 THEN
+         RETURN;
+      END IF;
+
+      FORALL i IN 1 .. gn_error_count
+         INSERT INTO XXTJX_WD_EXP_AP_ERRORS
+            (request_id, batch_id, source, invoice_id, invoice_num,
+             vendor_num, employee_number, invoice_line_num,
+             error_code, error_msg, creation_date)
+         VALUES
+            (gt_errors (i).request_id, gt_errors (i).batch_id, gt_errors (i).source,
+             gt_errors (i).invoice_id, gt_errors (i).invoice_num,
+             gt_errors (i).vendor_num, gt_errors (i).employee_number,
+             gt_errors (i).invoice_line_num, gt_errors (i).error_code,
+             gt_errors (i).error_msg, SYSDATE);
+   END flush_errors;
+
+   ------------------------------------------------------------------------
+   -- PRIVATE: mark_transferred()
+   ------------------------------------------------------------------------
+   PROCEDURE mark_transferred (p_invoice_num IN VARCHAR2, p_batch_id IN VARCHAR2)
+   IS
+   BEGIN
+      UPDATE XXTJX_AP_INVOICES_INTERFACE
+         SET process_status = g_status_transferred, error_message = NULL,
+             last_update_date = SYSDATE, last_updated_by = g_user_id
+       WHERE invoice_num = p_invoice_num AND batch_id = p_batch_id;
+
+      UPDATE XXTJX_AP_INV_LINES_INTERFACE
+         SET process_status = g_status_transferred, error_message = NULL,
+             last_update_date = SYSDATE, last_updated_by = g_user_id
+       WHERE invoice_num = p_invoice_num AND batch_id = p_batch_id;
+   END mark_transferred;
+
+   --======================================================================
+   -- VALIDATION FUNCTIONS  (each guarded by its config toggle)
+   --======================================================================
+
+   ------------------------------------------------------------------------
+   FUNCTION validate_mandatory_fields
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_invoice_date  IN  DATE
+      ,p_invoice_amt   IN  NUMBER
+      ,p_currency      IN  VARCHAR2
+      ,p_description    IN VARCHAR2
+      ,p_employee_num  IN  VARCHAR2
+      ,p_ou_name       IN  VARCHAR2
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_missing   VARCHAR2(1000) := NULL;
+   BEGIN
+      IF NVL (g_chk_mandatory, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
+      -- Required header fields per the Workday Invoice File Format.
+      IF p_invoice_num  IS NULL THEN l_missing := l_missing || 'Invoice Number, ';     END IF;
+      IF p_invoice_date IS NULL THEN l_missing := l_missing || 'Invoice Date, ';        END IF;
+      IF p_invoice_amt  IS NULL THEN l_missing := l_missing || 'Invoice Amount, ';      END IF;
+      IF p_currency     IS NULL THEN l_missing := l_missing || 'Currency, ';            END IF;
+      IF p_description  IS NULL THEN l_missing := l_missing || 'Invoice Description, '; END IF;
+      IF p_employee_num IS NULL THEN l_missing := l_missing || 'Employee Number, ';     END IF;
+      IF p_ou_name      IS NULL THEN l_missing := l_missing || 'Operating Unit Name, '; END IF;
+
+      IF l_missing IS NOT NULL THEN
+         x_error_message := 'Missing mandatory field(s): ' || RTRIM (l_missing, ', ');
+         RETURN FALSE;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating mandatory fields : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_mandatory_fields;
+
    ------------------------------------------------------------------------
    FUNCTION validate_employee_number
    (
@@ -150,6 +255,10 @@ AS
    IS
       l_cnt   PLS_INTEGER;
    BEGIN
+      IF NVL (g_chk_employee, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
       IF p_employee_number IS NULL THEN
          x_error_message := 'Missing mandatory field: Employee Number';
          RETURN FALSE;
@@ -176,90 +285,6 @@ AS
    END validate_employee_number;
 
    ------------------------------------------------------------------------
-   -- FUNCTION: derive_person_details
-   --   Resolves to exactly ONE active, primary employee assignment.
-   --   Handles multiple person ids / multiple active assignments cleanly.
-   ------------------------------------------------------------------------
-   FUNCTION derive_person_details
-   (
-       p_employee_number IN  VARCHAR2
-      ,p_org_id          IN  NUMBER
-      ,x_employee_rec    OUT NOCOPY employee_rec_type
-      ,x_error_message   OUT NOCOPY VARCHAR2
-   ) RETURN BOOLEAN
-   IS
-      l_active_cnt   PLS_INTEGER;
-   BEGIN
-      -------------------------------------------------------------------
-      -- Count distinct persons that have an ACTIVE, PRIMARY employee
-      -- assignment effective today.  This single query covers:
-      --   * Active Assignment        (per_system_status = ACTIVE_ASSIGN)
-      --   * Effective Dates          (SYSDATE between effective dates)
-      --   * Assignment Status        (via assignment_status_type)
-      --   * Primary Assignment       (primary_flag = 'Y')
-      -------------------------------------------------------------------
-      SELECT COUNT (DISTINCT papf.person_id)
-        INTO l_active_cnt
-        FROM per_all_people_f          papf
-            ,per_all_assignments_f     paaf
-            ,per_assignment_status_types past
-       WHERE papf.employee_number = p_employee_number
-         AND paaf.person_id       = papf.person_id
-         AND paaf.assignment_type = 'E'
-         AND paaf.primary_flag    = 'Y'
-         AND past.assignment_status_type_id = paaf.assignment_status_type_id
-         AND past.per_system_status         = 'ACTIVE_ASSIGN'
-         AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date
-                                 AND papf.effective_end_date
-         AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date
-                                 AND paaf.effective_end_date;
-
-      IF l_active_cnt = 0 THEN
-         x_error_message := 'No active primary assignment found for Employee Number '
-                            || p_employee_number;
-         RETURN FALSE;
-      ELSIF l_active_cnt > 1 THEN
-         x_error_message := 'Multiple active employees found for Employee Number '
-                            || p_employee_number || ' - cannot uniquely identify person';
-         RETURN FALSE;
-      END IF;
-
-      -------------------------------------------------------------------
-      -- Exactly one - fetch the person + party details.
-      -------------------------------------------------------------------
-      SELECT DISTINCT papf.person_id
-                     ,papf.full_name
-                     ,papf.party_id
-        INTO x_employee_rec.person_id
-            ,x_employee_rec.full_name
-            ,x_employee_rec.party_id
-        FROM per_all_people_f          papf
-            ,per_all_assignments_f     paaf
-            ,per_assignment_status_types past
-       WHERE papf.employee_number = p_employee_number
-         AND paaf.person_id       = papf.person_id
-         AND paaf.assignment_type = 'E'
-         AND paaf.primary_flag    = 'Y'
-         AND past.assignment_status_type_id = paaf.assignment_status_type_id
-         AND past.per_system_status         = 'ACTIVE_ASSIGN'
-         AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date
-                                 AND papf.effective_end_date
-         AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date
-                                 AND paaf.effective_end_date;
-
-      x_employee_rec.org_id := p_org_id;
-      RETURN TRUE;
-   EXCEPTION
-      WHEN OTHERS THEN
-         x_error_message := 'Error deriving person details for Employee Number '
-                            || p_employee_number || ' : ' || SQLERRM;
-         RETURN FALSE;
-   END derive_person_details;
-
-   ------------------------------------------------------------------------
-   -- FUNCTION: validate_operating_unit
-   --   Resolve the file OU Name (or the parameter org_id) to a valid org_id.
-   ------------------------------------------------------------------------
    FUNCTION validate_operating_unit
    (
        p_operating_unit_name IN  VARCHAR2
@@ -269,27 +294,12 @@ AS
    ) RETURN BOOLEAN
    IS
       l_org_id   hr_operating_units.organization_id%TYPE;
+      l_cnt      PLS_INTEGER;
    BEGIN
-      -- When the concurrent parameter Operating Unit is supplied it wins;
-      -- otherwise derive from the Operating Unit Name in the file (seeded
-      -- behaviour, where the OU parameter is optional).
+      -- Parameter wins; else derive from the file OU name.
       IF p_org_id_param IS NOT NULL THEN
-         BEGIN
-            SELECT organization_id
-              INTO l_org_id
-              FROM hr_operating_units
-             WHERE organization_id = p_org_id_param;
-         EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-               x_error_message := 'Invalid Operating Unit parameter (org_id=' || p_org_id_param || ')';
-               RETURN FALSE;
-         END;
-      ELSE
-         IF p_operating_unit_name IS NULL THEN
-            x_error_message := 'Missing mandatory field: Operating Unit Name';
-            RETURN FALSE;
-         END IF;
-
+         l_org_id := p_org_id_param;
+      ELSIF p_operating_unit_name IS NOT NULL THEN
          BEGIN
             SELECT organization_id
               INTO l_org_id
@@ -303,6 +313,24 @@ AS
                x_error_message := 'Ambiguous Operating Unit Name: ' || p_operating_unit_name;
                RETURN FALSE;
          END;
+      ELSE
+         x_error_message := 'Missing mandatory field: Operating Unit Name';
+         RETURN FALSE;
+      END IF;
+
+      -- Confirm the resolved org id is a valid, dated operating unit.
+      IF NVL (g_chk_ou, 'NO') = 'YES' THEN
+         SELECT COUNT (*)
+           INTO l_cnt
+           FROM hr_operating_units
+          WHERE organization_id = l_org_id
+            AND TRUNC (SYSDATE) BETWEEN NVL (date_from, SYSDATE - 1)
+                                    AND NVL (date_to, SYSDATE + 1);
+
+         IF l_cnt = 0 THEN
+            x_error_message := 'Invalid / inactive Operating Unit (org_id=' || l_org_id || ')';
+            RETURN FALSE;
+         END IF;
       END IF;
 
       x_org_id := l_org_id;
@@ -314,9 +342,254 @@ AS
    END validate_operating_unit;
 
    ------------------------------------------------------------------------
-   -- FUNCTION: get_employee_supplier
-   --   Existing employee supplier + pay site for the OU (seeded approach:
-   --   supplier is matched on PARTY_ID; site is the employee pay site).
+   FUNCTION validate_invoice_currency
+   (
+       p_currency      IN  VARCHAR2
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_cnt   PLS_INTEGER;
+   BEGIN
+      IF NVL (g_chk_currency, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
+      SELECT COUNT (currency_code)
+        INTO l_cnt
+        FROM fnd_currencies
+       WHERE currency_code = p_currency
+         AND enabled_flag  = 'Y'
+         AND currency_flag = 'Y'
+         AND SYSDATE BETWEEN NVL (start_date_active, SYSDATE - 1)
+                         AND NVL (end_date_active, SYSDATE + 1);
+
+      IF l_cnt = 0 THEN
+         x_error_message := 'Invalid or inactive currency: ' || p_currency;
+         RETURN FALSE;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating currency : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_invoice_currency;
+
+   ------------------------------------------------------------------------
+   FUNCTION validate_invoice_type
+   (
+       p_invoice_type_code IN  VARCHAR2
+      ,x_error_message     OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_cnt   PLS_INTEGER;
+   BEGIN
+      IF NVL (g_chk_inv_type, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
+      SELECT COUNT (lookup_code)
+        INTO l_cnt
+        FROM ap_lookup_codes
+       WHERE lookup_type = 'INVOICE_TYPE'
+         AND UPPER (lookup_code) = UPPER (NVL (p_invoice_type_code, g_inv_type_standard))
+         AND enabled_flag = 'Y'
+         AND SYSDATE BETWEEN NVL (start_date_active, SYSDATE - 1)
+                         AND NVL (inactive_date, SYSDATE + 1);
+
+      IF l_cnt = 0 THEN
+         x_error_message := 'Invalid invoice type lookup code: ' || p_invoice_type_code;
+         RETURN FALSE;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating invoice type : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_invoice_type;
+
+   ------------------------------------------------------------------------
+   FUNCTION validate_invoice_line_type
+   (
+       p_line_type_code IN  VARCHAR2
+      ,x_error_message  OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_cnt   PLS_INTEGER;
+   BEGIN
+      IF NVL (g_chk_line_type, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
+      SELECT COUNT (lookup_code)
+        INTO l_cnt
+        FROM ap_lookup_codes
+       WHERE lookup_type = 'INVOICE_LINE_TYPE'
+         AND UPPER (lookup_code) = UPPER (NVL (p_line_type_code, g_line_type_item))
+         AND enabled_flag = 'Y'
+         AND SYSDATE BETWEEN NVL (start_date_active, SYSDATE - 1)
+                         AND NVL (inactive_date, SYSDATE + 1);
+
+      IF l_cnt = 0 THEN
+         x_error_message := 'Invalid invoice line type lookup code: ' || p_line_type_code;
+         RETURN FALSE;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating line type : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_invoice_line_type;
+
+   ------------------------------------------------------------------------
+   FUNCTION validate_invoice_num
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_batch_id      IN  VARCHAR2
+      ,p_source        IN  VARCHAR2
+      ,p_vendor_id     IN  NUMBER
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_cnt   PLS_INTEGER;
+   BEGIN
+      -- (a) Duplicate within the same staging batch (other rows, same inv#).
+      IF NVL (g_chk_dup_batch, 'NO') = 'YES' THEN
+         SELECT COUNT (1)
+           INTO l_cnt
+           FROM XXTJX_AP_INVOICES_INTERFACE xii
+          WHERE xii.source      = p_source
+            AND xii.batch_id    = p_batch_id
+            AND xii.invoice_num = p_invoice_num;
+
+         IF l_cnt > 1 THEN
+            x_error_message := 'Duplicate invoice number within batch: ' || p_invoice_num;
+            RETURN FALSE;
+         END IF;
+      END IF;
+
+      -- (b) Already exists for this supplier in Payables.
+      IF NVL (g_chk_dup_exists, 'NO') = 'YES' AND p_vendor_id IS NOT NULL THEN
+         SELECT COUNT (1)
+           INTO l_cnt
+           FROM ap_invoices_all aia
+          WHERE aia.vendor_id = p_vendor_id
+            AND UPPER (aia.invoice_num) = UPPER (p_invoice_num);
+
+         IF l_cnt > 0 THEN
+            x_error_message := 'Invoice number already exists in Payables: ' || p_invoice_num;
+            RETURN FALSE;
+         END IF;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating invoice number : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_invoice_num;
+
+   ------------------------------------------------------------------------
+   FUNCTION validate_invoice_amounts
+   (
+       p_invoice_num   IN  VARCHAR2
+      ,p_batch_id      IN  VARCHAR2
+      ,p_header_amount IN  NUMBER
+      ,x_error_message OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_line_total   NUMBER;
+   BEGIN
+      IF NVL (g_chk_hdr_line_amt, 'NO') <> 'YES' THEN
+         RETURN TRUE;
+      END IF;
+
+      SELECT NVL (SUM (amount), 0)
+        INTO l_line_total
+        FROM XXTJX_AP_INV_LINES_INTERFACE
+       WHERE invoice_num = p_invoice_num
+         AND batch_id    = p_batch_id;
+
+      IF ABS (NVL (p_header_amount, 0) - l_line_total) > g_amount_tolerance THEN
+         x_error_message := 'Header amount (' || p_header_amount
+                            || ') does not equal sum of line amounts (' || l_line_total || ')';
+         RETURN FALSE;
+      END IF;
+
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error validating header vs line amounts : ' || SQLERRM;
+         RETURN FALSE;
+   END validate_invoice_amounts;
+
+   --======================================================================
+   -- DERIVATION FUNCTIONS
+   --======================================================================
+
+   ------------------------------------------------------------------------
+   FUNCTION derive_person_details
+   (
+       p_employee_number IN  VARCHAR2
+      ,p_org_id          IN  NUMBER
+      ,x_employee_rec    OUT NOCOPY employee_rec_type
+      ,x_error_message   OUT NOCOPY VARCHAR2
+   ) RETURN BOOLEAN
+   IS
+      l_active_cnt   PLS_INTEGER;
+   BEGIN
+      -- Count distinct persons with an ACTIVE, PRIMARY employee assignment
+      -- effective today (active assignment + effective dates + status +
+      -- primary, in one pass).
+      SELECT COUNT (DISTINCT papf.person_id)
+        INTO l_active_cnt
+        FROM per_all_people_f          papf
+            ,per_all_assignments_f     paaf
+            ,per_assignment_status_types past
+       WHERE papf.employee_number = p_employee_number
+         AND paaf.person_id       = papf.person_id
+         AND paaf.assignment_type = 'E'
+         AND paaf.primary_flag    = 'Y'
+         AND past.assignment_status_type_id = paaf.assignment_status_type_id
+         AND past.per_system_status         = 'ACTIVE_ASSIGN'
+         AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
+         AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date AND paaf.effective_end_date;
+
+      IF l_active_cnt = 0 THEN
+         x_error_message := 'No active primary assignment found for Employee Number '
+                            || p_employee_number;
+         RETURN FALSE;
+      ELSIF l_active_cnt > 1 THEN
+         x_error_message := 'Multiple active employees found for Employee Number '
+                            || p_employee_number || ' - cannot uniquely identify person';
+         RETURN FALSE;
+      END IF;
+
+      SELECT DISTINCT papf.person_id, papf.full_name, papf.party_id
+        INTO x_employee_rec.person_id, x_employee_rec.full_name, x_employee_rec.party_id
+        FROM per_all_people_f          papf
+            ,per_all_assignments_f     paaf
+            ,per_assignment_status_types past
+       WHERE papf.employee_number = p_employee_number
+         AND paaf.person_id       = papf.person_id
+         AND paaf.assignment_type = 'E'
+         AND paaf.primary_flag    = 'Y'
+         AND past.assignment_status_type_id = paaf.assignment_status_type_id
+         AND past.per_system_status         = 'ACTIVE_ASSIGN'
+         AND TRUNC (SYSDATE) BETWEEN papf.effective_start_date AND papf.effective_end_date
+         AND TRUNC (SYSDATE) BETWEEN paaf.effective_start_date AND paaf.effective_end_date;
+
+      x_employee_rec.org_id := p_org_id;
+      RETURN TRUE;
+   EXCEPTION
+      WHEN OTHERS THEN
+         x_error_message := 'Error deriving person details for Employee Number '
+                            || p_employee_number || ' : ' || SQLERRM;
+         RETURN FALSE;
+   END derive_person_details;
+
    ------------------------------------------------------------------------
    FUNCTION get_employee_supplier
    (
@@ -327,52 +600,37 @@ AS
    ) RETURN BOOLEAN
    IS
    BEGIN
-      -- Supplier keyed on the employee party.
       BEGIN
-         SELECT aps.vendor_id
-               ,aps.vendor_name
-               ,aps.segment1
-               ,aps.party_id
-               ,aps.terms_id
-               ,aps.pay_group_lookup_code
-               ,aps.accts_pay_code_combination_id
-           INTO x_vendor_rec.vendor_id
-               ,x_vendor_rec.vendor_name
-               ,x_vendor_rec.vendor_num
-               ,x_vendor_rec.party_id
-               ,x_vendor_rec.terms_id
-               ,x_vendor_rec.pay_group
-               ,x_vendor_rec.liab_acc
+         SELECT aps.vendor_id, aps.vendor_name, aps.segment1, aps.party_id,
+                aps.terms_id, aps.pay_group_lookup_code, aps.accts_pay_code_combination_id
+           INTO x_vendor_rec.vendor_id, x_vendor_rec.vendor_name, x_vendor_rec.vendor_num,
+                x_vendor_rec.party_id, x_vendor_rec.terms_id, x_vendor_rec.pay_group,
+                x_vendor_rec.liab_acc
            FROM ap_suppliers aps
-          WHERE aps.party_id            = p_party_id
+          WHERE aps.party_id = p_party_id
             AND NVL (aps.enabled_flag, 'Y') = 'Y'
             AND NVL (aps.vendor_type_lookup_code, g_vendor_type_emp) = g_vendor_type_emp;
       EXCEPTION
          WHEN NO_DATA_FOUND THEN
-            x_error_message := 'No existing employee supplier';   -- caller will create
+            x_error_message := 'No existing employee supplier';
             RETURN FALSE;
          WHEN TOO_MANY_ROWS THEN
             x_error_message := 'Multiple employee suppliers found for party_id ' || p_party_id;
             RETURN FALSE;
       END;
 
-      -- Active pay site for this supplier in the requested OU.
       BEGIN
-         SELECT assa.vendor_site_id
-               ,assa.vendor_site_code
-               ,assa.party_site_id
-           INTO x_vendor_rec.vendor_site_id
-               ,x_vendor_rec.vendor_site_code
-               ,x_vendor_rec.party_site_id
+         SELECT assa.vendor_site_id, assa.vendor_site_code, assa.party_site_id
+           INTO x_vendor_rec.vendor_site_id, x_vendor_rec.vendor_site_code, x_vendor_rec.party_site_id
            FROM ap_supplier_sites_all assa
-          WHERE assa.vendor_id    = x_vendor_rec.vendor_id
-            AND assa.org_id       = p_org_id
+          WHERE assa.vendor_id     = x_vendor_rec.vendor_id
+            AND assa.org_id        = p_org_id
             AND assa.pay_site_flag = 'Y'
             AND SYSDATE < NVL (assa.inactive_date, SYSDATE + 1)
             AND ROWNUM = 1;
       EXCEPTION
          WHEN NO_DATA_FOUND THEN
-            x_error_message := 'No employee supplier site';   -- caller will create
+            x_error_message := 'No employee supplier site';
             RETURN FALSE;
       END;
 
@@ -384,7 +642,7 @@ AS
    END get_employee_supplier;
 
    ------------------------------------------------------------------------
-   -- PRIVATE: create_payee  (IBY external payee, seeded CreatePayee)
+   -- PRIVATE: create_payee (IBY external payee, seeded CreatePayee)
    ------------------------------------------------------------------------
    FUNCTION create_payee
    (
@@ -402,21 +660,17 @@ AS
       l_create_tab   iby_disbursement_setup_pub.ext_payee_create_tab_type;
    BEGIN
       BEGIN
-         SELECT 'Y'
-           INTO l_exists
+         SELECT 'Y' INTO l_exists
            FROM iby_external_payees_all
-          WHERE payee_party_id = p_party_id
-            AND org_id         = p_org_id
-            AND ROWNUM         = 1;
-         RETURN TRUE;   -- already a payee
+          WHERE payee_party_id = p_party_id AND org_id = p_org_id AND ROWNUM = 1;
+         RETURN TRUE;
       EXCEPTION
-         WHEN NO_DATA_FOUND THEN
-            NULL;        -- fall through and create
+         WHEN NO_DATA_FOUND THEN NULL;
       END;
 
-      l_payee_tab (0).payee_party_id    := p_party_id;
-      l_payee_tab (0).payer_org_id      := p_org_id;
-      l_payee_tab (0).payment_function  := 'PAYABLES_DISB';
+      l_payee_tab (0).payee_party_id     := p_party_id;
+      l_payee_tab (0).payer_org_id       := p_org_id;
+      l_payee_tab (0).payment_function   := 'PAYABLES_DISB';
       l_payee_tab (0).exclusive_pay_flag := 'N';
 
       iby_disbursement_setup_pub.create_external_payee
@@ -443,10 +697,6 @@ AS
    END create_payee;
 
    ------------------------------------------------------------------------
-   -- FUNCTION: create_employee_supplier
-   --   Create supplier (if needed) + pay site + payee, mirroring the seeded
-   --   AP_VENDOR_PUB_PKG flow but only with what Workday needs.
-   ------------------------------------------------------------------------
    FUNCTION create_employee_supplier
    (
        p_employee_rec  IN  employee_rec_type
@@ -470,7 +720,6 @@ AS
       l_base_curr     ap_system_parameters_all.base_currency_code%TYPE;
       l_pay_priority  ap_system_parameters_all.employee_payment_priority%TYPE;
    BEGIN
-      -- Payables Option must allow automatic employee->supplier creation.
       BEGIN
          SELECT create_employee_vendor_flag, base_currency_code, employee_payment_priority
            INTO l_create_flag, l_base_curr, l_pay_priority
@@ -487,28 +736,19 @@ AS
          RETURN FALSE;
       END IF;
 
-      -------------------------------------------------------------------
-      -- Create the supplier when it does not yet exist for the employee.
-      -------------------------------------------------------------------
       IF NVL (x_vendor_rec.vendor_id, -1) = -1 THEN
-         l_vendor_rec.vendor_name              := p_full_name;
-         l_vendor_rec.employee_id              := p_employee_rec.person_id;
-         l_vendor_rec.vendor_type_lookup_code  := g_vendor_type_emp;
-         l_vendor_rec.invoice_currency_code    := l_base_curr;
-         l_vendor_rec.payment_currency_code    := l_base_curr;
-         l_vendor_rec.payment_priority         := l_pay_priority;
+         l_vendor_rec.vendor_name             := p_full_name;
+         l_vendor_rec.employee_id             := p_employee_rec.person_id;
+         l_vendor_rec.vendor_type_lookup_code := g_vendor_type_emp;
+         l_vendor_rec.invoice_currency_code   := l_base_curr;
+         l_vendor_rec.payment_currency_code   := l_base_curr;
+         l_vendor_rec.payment_priority        := l_pay_priority;
 
          ap_vendor_pub_pkg.create_vendor
-            (p_api_version      => 1.0
-            ,p_init_msg_list    => fnd_api.g_false
-            ,p_commit           => fnd_api.g_false
+            (p_api_version => 1.0, p_init_msg_list => fnd_api.g_false, p_commit => fnd_api.g_false
             ,p_validation_level => fnd_api.g_valid_level_full
-            ,x_return_status    => l_return
-            ,x_msg_count        => l_msg_count
-            ,x_msg_data         => l_msg_data
-            ,p_vendor_rec       => l_vendor_rec
-            ,x_vendor_id        => l_vendor_id
-            ,x_party_id         => l_party_id);
+            ,x_return_status => l_return, x_msg_count => l_msg_count, x_msg_data => l_msg_data
+            ,p_vendor_rec => l_vendor_rec, x_vendor_id => l_vendor_id, x_party_id => l_party_id);
 
          IF l_return <> fnd_api.g_ret_sts_success THEN
             x_error_message := 'Vendor creation failed : ' || SUBSTRB (l_msg_data, 1, 200);
@@ -519,29 +759,20 @@ AS
          x_vendor_rec.party_id  := NVL (l_party_id, l_vendor_rec.party_id);
       END IF;
 
-      -------------------------------------------------------------------
-      -- Create the pay site (OFFICE) for the OU.
-      -------------------------------------------------------------------
-      l_site_rec.vendor_id              := x_vendor_rec.vendor_id;
-      l_site_rec.org_id                 := p_org_id;
-      l_site_rec.vendor_site_code       := 'OFFICE';
-      l_site_rec.pay_site_flag          := 'Y';
-      l_site_rec.invoice_currency_code  := l_base_curr;
-      l_site_rec.payment_currency_code  := l_base_curr;
-      l_site_rec.payment_priority       := l_pay_priority;
+      l_site_rec.vendor_id             := x_vendor_rec.vendor_id;
+      l_site_rec.org_id                := p_org_id;
+      l_site_rec.vendor_site_code      := 'OFFICE';
+      l_site_rec.pay_site_flag         := 'Y';
+      l_site_rec.invoice_currency_code := l_base_curr;
+      l_site_rec.payment_currency_code := l_base_curr;
+      l_site_rec.payment_priority      := l_pay_priority;
 
       ap_vendor_pub_pkg.create_vendor_site
-         (p_api_version      => 1.0
-         ,p_init_msg_list    => fnd_api.g_false
-         ,p_commit           => fnd_api.g_false
+         (p_api_version => 1.0, p_init_msg_list => fnd_api.g_false, p_commit => fnd_api.g_false
          ,p_validation_level => fnd_api.g_valid_level_full
-         ,x_return_status    => l_return
-         ,x_msg_count        => l_msg_count
-         ,x_msg_data         => l_msg_data
-         ,p_vendor_site_rec  => l_site_rec
-         ,x_vendor_site_id   => l_site_id
-         ,x_party_site_id    => l_party_site_id
-         ,x_location_id      => l_location_id);
+         ,x_return_status => l_return, x_msg_count => l_msg_count, x_msg_data => l_msg_data
+         ,p_vendor_site_rec => l_site_rec, x_vendor_site_id => l_site_id
+         ,x_party_site_id => l_party_site_id, x_location_id => l_location_id);
 
       IF l_return <> fnd_api.g_ret_sts_success THEN
          x_error_message := 'Vendor site creation failed : ' || SUBSTRB (l_msg_data, 1, 200);
@@ -552,19 +783,15 @@ AS
       x_vendor_rec.vendor_site_code := l_site_rec.vendor_site_code;
       x_vendor_rec.party_site_id    := l_party_site_id;
 
-      -- Refresh terms / pay group / liability from the new supplier.
       BEGIN
-         SELECT vendor_name, segment1, terms_id,
-                pay_group_lookup_code, accts_pay_code_combination_id
+         SELECT vendor_name, segment1, terms_id, pay_group_lookup_code, accts_pay_code_combination_id
            INTO x_vendor_rec.vendor_name, x_vendor_rec.vendor_num, x_vendor_rec.terms_id,
                 x_vendor_rec.pay_group, x_vendor_rec.liab_acc
-           FROM ap_suppliers
-          WHERE vendor_id = x_vendor_rec.vendor_id;
+           FROM ap_suppliers WHERE vendor_id = x_vendor_rec.vendor_id;
       EXCEPTION
          WHEN OTHERS THEN NULL;
       END;
 
-      -- Ensure an IBY payee exists for the OU.
       IF NOT create_payee (x_vendor_rec.party_id, p_org_id, x_error_message) THEN
          RETURN FALSE;
       END IF;
@@ -576,10 +803,10 @@ AS
          RETURN FALSE;
    END create_employee_supplier;
 
-   ------------------------------------------------------------------------
-   -- PRIVATE: insert_invoice_header
-   --   One row into AP_INVOICES_INTERFACE.  Returns the generated invoice_id.
-   ------------------------------------------------------------------------
+   --======================================================================
+   -- INTERFACE INSERTION
+   --======================================================================
+
    FUNCTION insert_invoice_header
    (
        p_hdr        IN XXTJX_AP_INVOICES_INTERFACE%ROWTYPE
@@ -614,10 +841,6 @@ AS
       RETURN l_invoice_id;
    END insert_invoice_header;
 
-   ------------------------------------------------------------------------
-   -- PRIVATE: insert_invoice_lines
-   --   Bulk insert all lines for one invoice via FORALL.
-   ------------------------------------------------------------------------
    PROCEDURE insert_invoice_lines
    (
        p_lines      IN line_stg_tab
@@ -644,9 +867,9 @@ AS
              SYSDATE, g_user_id, SYSDATE, g_user_id, g_login_id);
    END insert_invoice_lines;
 
-   ------------------------------------------------------------------------
-   -- MAIN: import_expenses
-   ------------------------------------------------------------------------
+   --======================================================================
+   -- MAIN
+   --======================================================================
    PROCEDURE import_expenses
    (
        errbuf        OUT NOCOPY VARCHAR2
@@ -658,7 +881,6 @@ AS
       ,p_debug_flag  IN          VARCHAR2 DEFAULT 'N'
    )
    IS
-      -- Header driving cursor: only NEW staging rows for the source/batch.
       CURSOR c_headers IS
          SELECT *
            FROM XXTJX_AP_INVOICES_INTERFACE h
@@ -669,24 +891,36 @@ AS
 
       TYPE hdr_tab IS TABLE OF XXTJX_AP_INVOICES_INTERFACE%ROWTYPE INDEX BY PLS_INTEGER;
       l_hdrs          hdr_tab;
-
       l_lines         line_stg_tab;
       l_emp_rec       employee_rec_type;
       l_vendor_rec    vendor_rec_type;
+      l_empty_vendor  vendor_rec_type;   -- used to reset l_vendor_rec each loop
       l_org_id        NUMBER;
       l_invoice_id    NUMBER;
       l_err           VARCHAR2(4000);
+      l_hdr_error     VARCHAR2(1);     -- 'Y' once any check fails for this record
 
       l_total         PLS_INTEGER := 0;
       l_success       PLS_INTEGER := 0;
       l_failure       PLS_INTEGER := 0;
       l_start         TIMESTAMP   := SYSTIMESTAMP;
+
+      -- Local helper: record a failure (stage + flag) without stopping.
+      PROCEDURE fail (p_h IN XXTJX_AP_INVOICES_INTERFACE%ROWTYPE,
+                      p_code IN VARCHAR2, p_msg IN VARCHAR2,
+                      p_line IN NUMBER DEFAULT NULL) IS
+      BEGIN
+         l_hdr_error := 'Y';
+         stage_inv_error (p_source => p_source, p_batch_id => p_h.batch_id,
+                          p_invoice_num => p_h.invoice_num, p_vendor_num => l_vendor_rec.vendor_num,
+                          p_employee_num => p_h.employee_number, p_line_num => p_line,
+                          p_error_code => p_code, p_error_msg => p_msg);
+         out_line (RPAD (p_h.invoice_num, 22) || RPAD (p_h.employee_number, 12)
+                   || RPAD ('ERROR', 10) || p_msg);
+      END fail;
    BEGIN
       g_debug := (NVL (UPPER (p_debug_flag), 'N') = 'Y');
 
-      ----------------------------------------------------------------------
-      -- Mandatory parameter check.
-      ----------------------------------------------------------------------
       IF p_source IS NULL THEN
          errbuf  := 'Parameter Source is mandatory.';
          retcode := g_ret_error;
@@ -703,14 +937,12 @@ AS
       log_line ('Group Id      : ' || NVL (p_group_id, '(none)'));
       log_line ('Started       : ' || TO_CHAR (l_start, 'DD-MON-YYYY HH24:MI:SS'));
       log_line ('============================================================');
+      load_config (p_source);
 
       out_line (RPAD ('Invoice Num', 22) || RPAD ('Employee', 12)
                 || RPAD ('Status', 10) || 'Message');
       out_line (RPAD ('-', 110, '-'));
 
-      ----------------------------------------------------------------------
-      -- Process headers in bulk batches.
-      ----------------------------------------------------------------------
       OPEN c_headers;
       LOOP
          FETCH c_headers BULK COLLECT INTO l_hdrs LIMIT g_bulk_limit;
@@ -718,78 +950,132 @@ AS
 
          FOR i IN 1 .. l_hdrs.COUNT
          LOOP
-            l_total := l_total + 1;
-            l_err   := NULL;
+            l_total     := l_total + 1;
+            l_hdr_error := 'N';
+            l_vendor_rec := l_empty_vendor;
 
             <<process_one_invoice>>
             BEGIN
-               -- 1. Employee number present and known.
-               IF NOT validate_employee_number (l_hdrs (i).employee_number, l_err) THEN
-                  RAISE_APPLICATION_ERROR (-20001, l_err);
+               --------------------------------------------------------------
+               -- Run ALL header validations; accumulate every failure.
+               --------------------------------------------------------------
+               IF NOT validate_mandatory_fields
+                        (l_hdrs (i).invoice_num, l_hdrs (i).invoice_date,
+                         l_hdrs (i).invoice_amount, l_hdrs (i).invoice_currency_code,
+                         l_hdrs (i).description, l_hdrs (i).employee_number,
+                         l_hdrs (i).operating_unit_name, l_err) THEN
+                  fail (l_hdrs (i), 'MANDATORY', l_err);
                END IF;
 
-               -- 2. Operating unit valid (param wins, else file OU name).
+               IF NOT validate_employee_number (l_hdrs (i).employee_number, l_err) THEN
+                  fail (l_hdrs (i), 'EMP_NUM', l_err);
+               END IF;
+
+               IF NOT validate_invoice_currency (l_hdrs (i).invoice_currency_code, l_err) THEN
+                  fail (l_hdrs (i), 'CURRENCY', l_err);
+               END IF;
+
+               IF NOT validate_invoice_type (l_hdrs (i).invoice_type_lookup_code, l_err) THEN
+                  fail (l_hdrs (i), 'INV_TYPE', l_err);
+               END IF;
+
+               IF NOT validate_invoice_amounts
+                        (l_hdrs (i).invoice_num, l_hdrs (i).batch_id,
+                         l_hdrs (i).invoice_amount, l_err) THEN
+                  fail (l_hdrs (i), 'HDR_LINE_AMT', l_err);
+               END IF;
+
+               -- Operating unit: needed for downstream derivation, so capture org_id.
                IF NOT validate_operating_unit
                         (l_hdrs (i).operating_unit_name, p_org_id, l_org_id, l_err) THEN
-                  RAISE_APPLICATION_ERROR (-20002, l_err);
+                  fail (l_hdrs (i), 'OU', l_err);
                END IF;
 
-               -- 3. Person / party derivation (single active assignment).
-               IF NOT derive_person_details
-                        (l_hdrs (i).employee_number, l_org_id, l_emp_rec, l_err) THEN
-                  RAISE_APPLICATION_ERROR (-20003, l_err);
-               END IF;
-
-               -- 4. Existing employee supplier + site, else create.
-               l_vendor_rec := NULL;
-               IF NOT get_employee_supplier
-                        (l_emp_rec.party_id, l_org_id, l_vendor_rec, l_err) THEN
-                  -- Not found -> attempt creation (seeded behaviour).
-                  l_vendor_rec.party_id := l_emp_rec.party_id;
-                  IF NOT create_employee_supplier
-                           (l_emp_rec, l_emp_rec.full_name, l_org_id, l_vendor_rec, l_err) THEN
-                     RAISE_APPLICATION_ERROR (-20004, l_err);
+               -- Person / vendor derivation only attempted when OU + employee are OK.
+               IF l_hdr_error = 'N' THEN
+                  IF NOT derive_person_details
+                           (l_hdrs (i).employee_number, l_org_id, l_emp_rec, l_err) THEN
+                     fail (l_hdrs (i), 'PERSON', l_err);
+                  ELSE
+                     IF NOT get_employee_supplier
+                              (l_emp_rec.party_id, l_org_id, l_vendor_rec, l_err) THEN
+                        l_vendor_rec.party_id := l_emp_rec.party_id;
+                        IF NOT create_employee_supplier
+                                 (l_emp_rec, l_emp_rec.full_name, l_org_id, l_vendor_rec, l_err) THEN
+                           fail (l_hdrs (i), 'VENDOR', l_err);
+                        END IF;
+                     END IF;
                   END IF;
                END IF;
 
-               -- 5. Collect this invoice's NEW lines.
-               SELECT * BULK COLLECT INTO l_lines
-                 FROM XXTJX_AP_INV_LINES_INTERFACE l
-                WHERE l.invoice_num    = l_hdrs (i).invoice_num
-                  AND l.batch_id       = l_hdrs (i).batch_id
-                  AND l.process_status = g_status_new
-                ORDER BY l.line_number;
-
-               IF l_lines.COUNT = 0 THEN
-                  RAISE_APPLICATION_ERROR (-20005, 'No lines found for invoice ' || l_hdrs (i).invoice_num);
+               -- Duplicate invoice number (needs vendor id) when vendor resolved.
+               IF l_hdr_error = 'N' THEN
+                  IF NOT validate_invoice_num
+                           (l_hdrs (i).invoice_num, l_hdrs (i).batch_id, p_source,
+                            l_vendor_rec.vendor_id, l_err) THEN
+                     fail (l_hdrs (i), 'DUP_INV', l_err);
+                  END IF;
                END IF;
 
-               -- 6. Insert into the Oracle AP Open Interface tables.
-               l_invoice_id := insert_invoice_header
-                                  (l_hdrs (i), l_vendor_rec, l_org_id, p_source, p_group_id);
-               insert_invoice_lines (l_lines, l_invoice_id, l_org_id);
+               --------------------------------------------------------------
+               -- Lines: collect + validate line type.
+               --------------------------------------------------------------
+               IF l_hdr_error = 'N' THEN
+                  SELECT * BULK COLLECT INTO l_lines
+                    FROM XXTJX_AP_INV_LINES_INTERFACE l
+                   WHERE l.invoice_num    = l_hdrs (i).invoice_num
+                     AND l.batch_id       = l_hdrs (i).batch_id
+                     AND l.process_status = g_status_new
+                   ORDER BY l.line_number;
 
-               -- 7. Mark staging Transferred.
-               mark_record (l_hdrs (i).invoice_num, l_hdrs (i).batch_id, g_status_transferred, NULL);
-               l_success := l_success + 1;
+                  IF l_lines.COUNT = 0 THEN
+                     fail (l_hdrs (i), 'NO_LINES', 'No lines found for invoice ' || l_hdrs (i).invoice_num);
+                  ELSE
+                     FOR j IN 1 .. l_lines.COUNT LOOP
+                        IF NOT validate_invoice_line_type (l_lines (j).line_type_lookup_code, l_err) THEN
+                           fail (l_hdrs (i), 'LINE_TYPE', l_err, l_lines (j).line_number);
+                        END IF;
+                     END LOOP;
+                  END IF;
+               END IF;
 
-               out_line (RPAD (l_hdrs (i).invoice_num, 22)
-                         || RPAD (l_hdrs (i).employee_number, 12)
-                         || RPAD ('TRANSFER', 10)
-                         || 'Inserted ' || l_lines.COUNT || ' line(s)');
+               --------------------------------------------------------------
+               -- Transfer to AP interface only if the record is clean.
+               --------------------------------------------------------------
+               IF l_hdr_error = 'N' THEN
+                  l_invoice_id := insert_invoice_header
+                                     (l_hdrs (i), l_vendor_rec, l_org_id, p_source, p_group_id);
+                  insert_invoice_lines (l_lines, l_invoice_id, l_org_id);
+                  mark_transferred (l_hdrs (i).invoice_num, l_hdrs (i).batch_id);
+                  l_success := l_success + 1;
+                  out_line (RPAD (l_hdrs (i).invoice_num, 22)
+                            || RPAD (l_hdrs (i).employee_number, 12)
+                            || RPAD ('TRANSFER', 10)
+                            || 'Inserted ' || l_lines.COUNT || ' line(s)');
+               ELSE
+                  l_failure := l_failure + 1;
+               END IF;
 
             EXCEPTION
                WHEN OTHERS THEN
+                  -- Unexpected error for this record only: stage + continue.
                   l_failure := l_failure + 1;
-                  l_err := NVL (l_err, SQLERRM);
-                  mark_record (l_hdrs (i).invoice_num, l_hdrs (i).batch_id, g_status_error, l_err);
+                  stage_inv_error (p_source => p_source, p_batch_id => l_hdrs (i).batch_id,
+                                   p_invoice_num => l_hdrs (i).invoice_num,
+                                   p_vendor_num => l_vendor_rec.vendor_num,
+                                   p_employee_num => l_hdrs (i).employee_number,
+                                   p_error_code => 'UNEXPECTED',
+                                   p_error_msg => NVL (l_err, SQLERRM));
                   out_line (RPAD (l_hdrs (i).invoice_num, 22)
                             || RPAD (l_hdrs (i).employee_number, 12)
-                            || RPAD ('ERROR', 10) || l_err);
+                            || RPAD ('ERROR', 10) || NVL (l_err, SQLERRM));
             END process_one_invoice;
          END LOOP;
 
-         -- Commit after each bulk batch (limited commits, not row-by-row).
+         -- Persist the staging status updates + accumulated errors per batch.
+         flush_errors;
+         gt_errors.DELETE;
+         gn_error_count := 0;
          COMMIT;
       END LOOP;
       CLOSE c_headers;
@@ -803,11 +1089,24 @@ AS
       log_line ('Errors          : ' || l_failure);
       log_line ('------------------------------------------------------------');
 
-      write_run_log
-         (p_proc => 'import_expenses', p_source => p_source, p_batch_id => p_batch_name,
-          p_total => l_total, p_success => l_success, p_failure => l_failure,
-          p_start => l_start,
-          p_status => CASE WHEN l_failure = 0 THEN 'SUCCESS' ELSE 'WARNING' END);
+      DECLARE
+         PRAGMA AUTONOMOUS_TRANSACTION;
+         l_end TIMESTAMP := SYSTIMESTAMP;
+      BEGIN
+         INSERT INTO XXTJX_WD_EXP_AP_LOG
+            (log_id, request_id, module_name, procedure_name, source, batch_id,
+             record_count, success_count, failure_count, start_time, end_time,
+             elapsed_seconds, status, message)
+         VALUES
+            (XXTJX_WD_EXP_AP_LOG_S.NEXTVAL, g_request_id, g_module, 'import_expenses',
+             p_source, p_batch_name, l_total, l_success, l_failure, l_start, l_end,
+             ROUND (EXTRACT (SECOND FROM (l_end - l_start))
+                    + EXTRACT (MINUTE FROM (l_end - l_start)) * 60, 2),
+             CASE WHEN l_failure = 0 THEN 'SUCCESS' ELSE 'WARNING' END, errbuf);
+         COMMIT;
+      EXCEPTION
+         WHEN OTHERS THEN ROLLBACK;
+      END;
 
       IF l_failure = 0 THEN
          retcode := g_ret_success;
@@ -815,7 +1114,7 @@ AS
       ELSE
          retcode := g_ret_warning;
          errbuf  := 'Completed with errors. Transferred=' || l_success
-                    || ', Errors=' || l_failure || '. See output for details.';
+                    || ', Errors=' || l_failure || '. See XXTJX_WD_EXP_AP_ERRORS / output.';
       END IF;
    EXCEPTION
       WHEN OTHERS THEN
@@ -827,10 +1126,6 @@ AS
          errbuf  := 'Fatal error in import_expenses : ' || SQLERRM;
          log_line (errbuf);
          log_line (DBMS_UTILITY.format_error_backtrace);
-         write_run_log
-            (p_proc => 'import_expenses', p_source => p_source, p_batch_id => p_batch_name,
-             p_total => l_total, p_success => l_success, p_failure => l_failure,
-             p_start => l_start, p_status => 'FATAL', p_message => errbuf);
    END import_expenses;
 
 END XXTJX_WD_EXP_AP_IMPORT_PKG;
