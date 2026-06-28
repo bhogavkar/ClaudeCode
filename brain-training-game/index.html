@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="neon">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#06070d" />
+  <meta name="description" content="NeuroForge — a futuristic AI-lab brain training platform. Train memory, focus, logic, speed, math, observation, spatial reasoning and strategy." />
+  <title>NeuroForge · Brain Training Lab</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="assets/icons/icon.svg" />
+  <link rel="stylesheet" href="styles/main.css" />
+</head>
+<body>
+  <!-- Animated particle / lighting background -->
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
+
+  <!-- Boot / loading screen -->
+  <div id="boot" class="boot">
+    <div class="boot-logo">
+      <div class="boot-ring"></div>
+      <span class="boot-mark">NF</span>
+    </div>
+    <h1 class="boot-title">NEURO<span>FORGE</span></h1>
+    <p class="boot-sub">Calibrating neural lab…</p>
+    <div class="boot-bar"><i></i></div>
+  </div>
+
+  <!-- App root -->
+  <div id="app" class="app hidden" role="application">
+    <!-- Top bar -->
+    <header class="topbar glass">
+      <button class="brand" data-nav="home" aria-label="Home">
+        <span class="brand-mark">NF</span>
+        <span class="brand-text">NEURO<b>FORGE</b></span>
+      </button>
+
+      <div class="stat-strip" id="stat-strip" aria-label="Player stats">
+        <div class="chip" title="Level"><span class="chip-ico">★</span><b id="hud-level">1</b></div>
+        <div class="chip" title="Brain Score"><span class="chip-ico">◈</span><b id="hud-score">0</b></div>
+        <div class="chip" title="Coins"><span class="chip-ico">⬡</span><b id="hud-coins">0</b></div>
+        <div class="chip" title="Daily Streak"><span class="chip-ico">⚡</span><b id="hud-streak">0</b></div>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="icon-btn" id="btn-sound" title="Toggle sound" aria-label="Toggle sound">♪</button>
+        <button class="icon-btn" id="btn-settings" title="Settings" aria-label="Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- Navigation rail -->
+    <nav class="rail glass" aria-label="Primary">
+      <button class="rail-btn active" data-nav="home"><i>⌂</i><span>Lab</span></button>
+      <button class="rail-btn" data-nav="play"><i>▸</i><span>Train</span></button>
+      <button class="rail-btn" data-nav="stats"><i>◴</i><span>Stats</span></button>
+      <button class="rail-btn" data-nav="skills"><i>✦</i><span>Skills</span></button>
+      <button class="rail-btn" data-nav="rewards"><i>♛</i><span>Rewards</span></button>
+    </nav>
+
+    <!-- Screen mount -->
+    <main id="screen" class="screen" tabindex="-1"></main>
+
+    <footer class="footer">
+      <span>NeuroForge · offline-ready PWA · <span id="brain-age-foot">Brain Age —</span></span>
+    </footer>
+  </div>
+
+  <!-- Settings drawer -->
+  <div id="settings-panel" class="drawer glass hidden" role="dialog" aria-label="Settings" aria-modal="true"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <!-- ===== Scripts (classic, namespaced — runs from file:// in Chrome) ===== -->
+  <script src="src/core/util.js"></script>
+  <script src="src/core/storage.js"></script>
+  <script src="src/core/audio.js"></script>
+  <script src="src/core/background.js"></script>
+  <script src="src/core/adaptive.js"></script>
+  <script src="src/core/progression.js"></script>
+  <script src="src/core/analytics.js"></script>
+  <script src="src/core/ui.js"></script>
+
+  <script src="src/games/base.js"></script>
+  <script src="src/games/sequenceMemory.js"></script>
+  <script src="src/games/cardMatch.js"></script>
+  <script src="src/games/visualMemory.js"></script>
+  <script src="src/games/reactionTime.js"></script>
+  <script src="src/games/mentalMath.js"></script>
+  <script src="src/games/patternLogic.js"></script>
+  <script src="src/games/schulte.js"></script>
+  <script src="src/games/oddOneOut.js"></script>
+  <script src="src/games/mazeSpatial.js"></script>
+  <script src="src/games/registry.js"></script>
+
+  <script src="src/core/screens.js"></script>
+  <script src="src/core/app.js"></script>
+</body>
+</html>

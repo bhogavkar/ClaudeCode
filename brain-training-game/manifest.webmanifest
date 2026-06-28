@@ -1,0 +1,15 @@
+{
+  "name": "NeuroForge — Brain Training Lab",
+  "short_name": "NeuroForge",
+  "description": "A futuristic AI-lab brain training platform: memory, focus, logic, speed, math, observation, spatial reasoning and strategy.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#06070d",
+  "theme_color": "#06070d",
+  "categories": ["games", "education", "health"],
+  "icons": [
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#19e3ff"/>
+      <stop offset="0.55" stop-color="#b14bff"/>
+      <stop offset="1" stop-color="#ff3ea5"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.4" r="0.7">
+      <stop offset="0" stop-color="#0b1226"/>
+      <stop offset="1" stop-color="#06070d"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- stylised neural brain -->
+  <g fill="none" stroke="url(#g)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 120c-46 0-78 30-82 64-30 6-52 30-52 62 0 26 14 46 34 56-6 30 14 62 50 70 6 26 30 44 60 44"/>
+    <path d="M256 120c46 0 78 30 82 64 30 6 52 30 52 62 0 26-14 46-34 56 6 30-14 62-50 70-6 26-30 44-60 44"/>
+    <line x1="256" y1="120" x2="256" y2="416"/>
+    <path d="M174 184c30 8 50 24 60 44M338 184c-30 8-50 24-60 44M138 246c34 0 60 14 76 36M374 246c-34 0-60 14-76 36M172 372c26-10 48-28 60-52M340 372c-26-10-48-28-60-52"/>
+  </g>
+  <!-- node dots -->
+  <g fill="#19e3ff">
+    <circle cx="174" cy="184" r="11"/><circle cx="138" cy="246" r="11"/><circle cx="172" cy="372" r="11"/>
+  </g>
+  <g fill="#ff3ea5">
+    <circle cx="338" cy="184" r="11"/><circle cx="374" cy="246" r="11"/><circle cx="340" cy="372" r="11"/>
+  </g>
+  <circle cx="256" cy="266" r="13" fill="#fff"/>
+</svg>
