@@ -569,12 +569,15 @@ function canMoveTo(x,y,radius,ghost){
   }
   return true;
 }
+function bombOverlap(b,x,y,radius){
+  const bx=b.c*TILE, by=b.r*TILE;
+  return x+radius> bx && x-radius< bx+TILE && y+radius> by && y-radius< by+TILE;
+}
 function bombBlocksAt(x,y,radius,entity){
   // bombs are solid except the one you're standing on when you place it
   for (const b of Game.bombs){
     if (b.passable && b.passable.has(entity)) continue;
-    const bx=b.c*TILE, by=b.r*TILE;
-    if (x+radius> bx && x-radius< bx+TILE && y+radius> by && y-radius< by+TILE) return b;
+    if (bombOverlap(b,x,y,radius)) return b;
   }
   return null;
 }
@@ -652,23 +655,17 @@ function updatePlayer(){
     if (Game.time%14===0) Sound.sfx.step();
   } else p.anim=0;
 
-  // mark bomb you're standing on as passable until you leave it
-  const {c,r}=toCell(p.x,p.y);
-  for (const b of Game.bombs){
-    if (!b.passable) b.passable=new Set();
-    if (b.c===c && b.r===r) b.passable.add(p);
-    else if (b.passable.has(p)){
-      // only remove once player fully off the tile
-      if (!bombBlocksAt(p.x,p.y,p.r*0.92,p) || true) b.passable.delete(p);
-    }
-  }
-
   if (keys.bomb) placeBomb();
 }
 
 function updateBombs(){
   for (let i=Game.bombs.length-1;i>=0;i--){
     const b=Game.bombs[i];
+    // an entity that placed (or stands on) a bomb passes through it until its
+    // collision box has FULLY cleared the tile; then the bomb turns solid.
+    for (const ent of [...b.passable]){
+      if (!bombOverlap(b, ent.x, ent.y, ent.r*0.92)) b.passable.delete(ent);
+    }
     // sliding (kicked) bombs
     if (b.sliding){
       const nx=b.x+b.vx, ny=b.y+b.vy;
