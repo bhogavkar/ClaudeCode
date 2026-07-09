@@ -1,0 +1,50 @@
+{
+  "documentType": "AP_INVOICE",
+  "batchId": "070925143022",
+  "header": {
+    "invoiceNumber": "FV/2025/00042",
+    "invoiceType": "STANDARD",
+    "vendorSiteId": 55501,
+    "operatingUnitName": "PL (431) TJX TK MAXX POLAND OU",
+    "source": "TJX E-Invoice",
+    "invoiceDate": "07012025",
+    "invoiceAmount": 12300.0,
+    "currency": "PLN",
+    "invoiceDescription": "Store supplies - July delivery",
+    "poNumber": "4500012345",
+    "ksefNumber": "1132191233-20250701-A1B2C3D4E5F6-9A",
+    "internalRecordingDate": "07012025"
+  },
+  "lines": [
+    {
+      "lineNumber": 1,
+      "lineDescription": "Shelving units",
+      "vendorSiteId": 55501,
+      "lineType": "ITEM",
+      "amount": 10000.0,
+      "distributionAccount": "128.1280575.3131.806502.000.0000",
+      "poNumber": "4500012345",
+      "poLineNumber": 1
+    },
+    {
+      "lineNumber": 2,
+      "lineDescription": "Inbound freight",
+      "vendorSiteId": 55501,
+      "lineType": "FREIGHT",
+      "amount": 2300.0,
+      "distributionAccount": "128.1280575.3131.806502.000.0000",
+      "poNumber": "4500012345",
+      "poLineNumber": 2
+    }
+  ],
+  "files": [
+    {
+      "fileName": "FV_2025_00042.pdf",
+      "mimeType": "application/pdf",
+      "fileContent": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIgNzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4gPj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA1OCA+PgpzdHJlYW0KQlQgL0YxIDI0IFRmIDcyIDcwMCBUZCAoVEpYIEtTZUYgU2FtcGxlIEludm9pY2UgUERGKSBUaiBFVAplbmRzdHJlYW0KZW5kb2JqCjUgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyNDEgMDAwMDAgbiAKMDAwMDAwMDM0OSAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQxOQolJUVPRg=="
+    }
+  ],
+  "trailer": {
+    "lineCount": 2
+  }
+}

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tjx.example.com/schemas/ksef-ap-invoice.schema.json",
+  "title": "TJX KSeF AP Invoice (OpenText inbound)",
+  "description": "Contract for a single Accounts Payable invoice delivered by OpenText to TJX Oracle EBS as one JSON file per invoice. Derived from the original pipe-delimited layout: top level = old H record, header = old DH record, lines = old DL records, trailer = old T record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["documentType", "batchId", "header", "lines", "files", "trailer"],
+  "properties": {
+    "documentType": {
+      "type": "string",
+      "const": "AP_INVOICE",
+      "description": "Fixed marker so EBS can route the file. Always AP_INVOICE for this flow."
+    },
+    "batchId": {
+      "type": "string",
+      "pattern": "^[0-9]{12}$",
+      "maxLength": 17,
+      "description": "Date/time stamp of the interfaced data in MMDDYYHHMISS format (12 digits)."
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Invoice header. Maps to the old DH record.",
+      "required": [
+        "invoiceNumber",
+        "invoiceType",
+        "vendorSiteId",
+        "operatingUnitName",
+        "source",
+        "invoiceDate",
+        "invoiceAmount",
+        "currency",
+        "ksefNumber",
+        "internalRecordingDate"
+      ],
+      "properties": {
+        "invoiceNumber": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Supplier invoice number as printed on the PDF."
+        },
+        "invoiceType": {
+          "type": "string",
+          "enum": ["STANDARD", "CREDIT"],
+          "description": "STANDARD for normal invoices, CREDIT for credit memos. Credit memo amounts must be negative."
+        },
+        "vendorNumber": { "type": ["string", "null"], "maxLength": 30 },
+        "vendorName": { "type": ["string", "null"], "maxLength": 240 },
+        "vendorId": { "type": ["integer", "null"] },
+        "vendorSiteCode": { "type": ["string", "null"], "maxLength": 30 },
+        "vendorSiteId": {
+          "type": "integer",
+          "description": "Vendor Site ID used for vendor identification in EBS."
+        },
+        "glDate": {
+          "type": ["string", "null"],
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$",
+          "description": "Optional. Normally derived in EBS. MMDDYYYY if supplied."
+        },
+        "operatingUnitName": {
+          "type": "string",
+          "enum": [
+            "PL (431) TJX TK MAXX POLAND OU",
+            "PL (432) TJX EURO DISTRIBUTION OU"
+          ],
+          "description": "Constant per operating unit."
+        },
+        "legalEntity": { "type": ["string", "null"], "maxLength": 10 },
+        "source": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "Import source name, e.g. TJX E-Invoice (to be confirmed and created in EBS)."
+        },
+        "invoiceDate": {
+          "type": "string",
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$",
+          "description": "Invoice / document date in MMDDYYYY format."
+        },
+        "invoiceAmount": {
+          "type": "number",
+          "description": "Total document amount inclusive of tax, in invoice currency. Negative for credit memos."
+        },
+        "totalTaxAmount": { "type": ["number", "null"] },
+        "currency": {
+          "type": "string",
+          "enum": ["PLN"],
+          "description": "3-char ISO currency. Only PLN expected in scope."
+        },
+        "exchangeRate": { "type": ["number", "null"] },
+        "exchangeRateDate": {
+          "type": ["string", "null"],
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$"
+        },
+        "exchangeRateType": { "type": ["string", "null"], "maxLength": 30 },
+        "invoiceDescription": { "type": ["string", "null"], "maxLength": 240 },
+        "invoiceTerms": { "type": ["string", "null"], "maxLength": 50 },
+        "termsDate": {
+          "type": ["string", "null"],
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$"
+        },
+        "poNumber": {
+          "type": ["string", "null"],
+          "maxLength": 12,
+          "description": "Header PO number. Required when the invoice is a PO invoice; omit or null for non-PO invoices."
+        },
+        "legacyPoNumber": { "type": ["string", "null"], "maxLength": 150 },
+        "legacyPoDate": {
+          "type": ["string", "null"],
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$"
+        },
+        "liabilityAccount": { "type": ["string", "null"], "maxLength": 32 },
+        "paymentMethod": { "type": ["string", "null"], "maxLength": 25 },
+        "calculateTaxDuringImport": { "type": ["string", "null"], "maxLength": 1 },
+        "remitToVendorNumber": { "type": ["string", "null"], "maxLength": 10 },
+        "remitToVendorName": { "type": ["string", "null"], "maxLength": 240 },
+        "remitToVendorId": { "type": ["integer", "null"] },
+        "remitToVendorSiteCode": { "type": ["string", "null"], "maxLength": 30 },
+        "remitToVendorSiteId": { "type": ["integer", "null"] },
+        "ksefNumber": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "KSeF reference number from the KSeF Portal (about 35 characters). Must be unique per invoice."
+        },
+        "internalRecordingDate": {
+          "type": "string",
+          "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$",
+          "description": "Date populated on the supplier invoice, MMDDYYYY."
+        }
+      }
+    },
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Invoice lines. Maps to the old DL records.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lineNumber", "vendorSiteId", "lineType", "amount", "distributionAccount"],
+        "properties": {
+          "lineNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Sequential line number starting at 1 within the invoice."
+          },
+          "lineDescription": { "type": ["string", "null"], "maxLength": 240 },
+          "vendorNumber": { "type": ["string", "null"], "maxLength": 30 },
+          "vendorName": { "type": ["string", "null"], "maxLength": 240 },
+          "vendorId": { "type": ["integer", "null"] },
+          "vendorSiteCode": { "type": ["string", "null"], "maxLength": 30 },
+          "vendorSiteId": { "type": "integer" },
+          "lineType": {
+            "type": "string",
+            "enum": ["ITEM", "FREIGHT", "TAX"],
+            "description": "Line type. TAX lines are not expected in current scope."
+          },
+          "amount": {
+            "type": "number",
+            "description": "Line amount. Negative for credit memo lines."
+          },
+          "accountingDate": {
+            "type": ["string", "null"],
+            "pattern": "^(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])[0-9]{4}$"
+          },
+          "setOfBookId": { "type": ["integer", "null"] },
+          "distributionAccount": {
+            "type": "string",
+            "maxLength": 250,
+            "description": "TJX 6-segment COA: Chain.Location.CostCenter.Account.Interchain.Future, e.g. 128.1280575.3131.806502.000.0000"
+          },
+          "lineGroupNumber": { "type": ["integer", "null"] },
+          "taxCode": { "type": ["string", "null"], "maxLength": 30 },
+          "taxRegime": { "type": ["string", "null"], "maxLength": 30 },
+          "tax": { "type": ["string", "null"], "maxLength": 30 },
+          "taxStatusCode": { "type": ["string", "null"], "maxLength": 30 },
+          "taxClassificationCode": { "type": ["string", "null"], "maxLength": 30 },
+          "prorateAcrossFlag": { "type": ["string", "null"], "maxLength": 1 },
+          "poNumber": {
+            "type": ["string", "null"],
+            "maxLength": 20,
+            "description": "Line-level PO number. Required for PO invoice lines."
+          },
+          "poLineNumber": { "type": ["integer", "null"] },
+          "poShipmentNumber": { "type": ["integer", "null"] },
+          "poDistributionNumber": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Attachments for the invoice. Normally the single invoice PDF.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fileName", "mimeType", "fileContent"],
+        "properties": {
+          "fileName": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Original file name of the attachment."
+          },
+          "mimeType": {
+            "type": "string",
+            "enum": ["application/pdf"],
+            "description": "MIME type of the attachment. PDF expected."
+          },
+          "fileContent": {
+            "type": "string",
+            "contentEncoding": "base64",
+            "pattern": "^[A-Za-z0-9+/]*={0,2}$",
+            "description": "Base64-encoded file bytes, on a single line with no embedded line breaks."
+          }
+        }
+      }
+    },
+    "trailer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lineCount"],
+      "description": "Control totals. Maps to the old T record.",
+      "properties": {
+        "lineCount": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of entries in the lines array. Used as an integrity check on load."
+        }
+      }
+    }
+  }
+}
