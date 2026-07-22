@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pp-postgres
+  namespace: planning-poker
+spec:
+  serviceName: pp-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: pp-postgres }
+  template:
+    metadata:
+      labels: { app: pp-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: poker
+            - name: POSTGRES_DB
+              value: planning_poker
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: pp-secrets, key: POSTGRES_PASSWORD }
+          readinessProbe:
+            exec: { command: ['pg_isready', '-U', 'poker'] }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: '250m', memory: '256Mi' }
+            limits: { cpu: '1', memory: '1Gi' }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests: { storage: 10Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pp-postgres
+  namespace: planning-poker
+spec:
+  clusterIP: None
+  selector: { app: pp-postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432

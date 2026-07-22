@@ -1,0 +1,53 @@
+# Full local stack: PostgreSQL + API (Express/Socket.IO) + web (NGINX).
+#
+#   docker compose up --build          # start everything
+#   docker compose exec backend npm run seed   # load sample data (once)
+#
+# The API syncs the Prisma schema on boot (db push). For real migrations use
+# `npm run prisma:migrate` in development and `prisma migrate deploy` in prod.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: poker
+      POSTGRES_PASSWORD: poker
+      POSTGRES_DB: planning_poker
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U poker -d planning_poker']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      DATABASE_URL: postgresql://poker:poker@db:5432/planning_poker?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+    command: sh -c "npx prisma db push --accept-data-loss && node dist/server.js"
+    ports:
+      - '4000:4000'
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '8080:80'
+
+volumes:
+  pgdata:

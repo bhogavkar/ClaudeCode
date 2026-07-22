@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pp-backend
+  namespace: planning-poker
+  labels: { app: pp-backend }
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: pp-backend }
+  template:
+    metadata:
+      labels: { app: pp-backend }
+    spec:
+      # Sync schema before the app starts. In prod prefer a migration Job with
+      # `prisma migrate deploy` instead of db push.
+      initContainers:
+        - name: db-migrate
+          image: ghcr.io/your-org/planning-poker-backend:latest
+          command: ['sh', '-c', 'npx prisma db push --accept-data-loss']
+          envFrom:
+            - configMapRef: { name: pp-config }
+            - secretRef: { name: pp-secrets }
+      containers:
+        - name: backend
+          image: ghcr.io/your-org/planning-poker-backend:latest
+          ports:
+            - containerPort: 4000
+          envFrom:
+            - configMapRef: { name: pp-config }
+            - secretRef: { name: pp-secrets }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 4000 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /api/health, port: 4000 }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: '200m', memory: '256Mi' }
+            limits: { cpu: '1', memory: '512Mi' }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pp-backend
+  namespace: planning-poker
+spec:
+  selector: { app: pp-backend }
+  ports:
+    - port: 4000
+      targetPort: 4000

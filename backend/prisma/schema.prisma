@@ -1,0 +1,333 @@
+// Prisma schema for the Planning Poker platform.
+// Models cover the full estimation domain: identity & RBAC, workspaces/projects/sprints,
+// planning sessions, stories, voting rounds, votes, discussion notes, notifications and audit.
+//
+// Design notes:
+// - Votes are decoupled from reveal state: a Vote row is stored the instant a member picks a
+//   card, but the API layer refuses to expose values until the round is REVEALED.
+// - A Session may run many Rounds (re-votes) against a single Story until consensus is locked.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access control
+// ---------------------------------------------------------------------------
+
+enum SystemRole {
+  ADMIN
+  SCRUM_MASTER
+  DEVELOPER
+  OBSERVER
+}
+
+enum AuthProvider {
+  LOCAL
+  AZURE_AD
+  GOOGLE
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  name         String
+  passwordHash String?      // null for SSO-only accounts
+  avatarUrl    String?
+  provider     AuthProvider @default(LOCAL)
+  providerId   String?      // external subject id for SSO
+  role         SystemRole   @default(DEVELOPER)
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  ownedWorkspaces Workspace[]        @relation("WorkspaceOwner")
+  memberships     WorkspaceMember[]
+  createdSessions Session[]          @relation("SessionCreator")
+  participations  SessionParticipant[]
+  votes           Vote[]
+  refreshTokens   RefreshToken[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+
+  @@index([provider, providerId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique // sha256 of the opaque refresh token
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdByIp String?
+  userAgent   String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Org hierarchy
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  ownerId     String
+  owner       User     @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members  WorkspaceMember[]
+  projects Project[]
+}
+
+model WorkspaceMember {
+  id          String     @id @default(uuid())
+  workspaceId String
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        SystemRole @default(DEVELOPER)
+  createdAt   DateTime   @default(now())
+
+  @@unique([workspaceId, userId])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  key         String    // short project key, e.g. "PP"
+  description String?
+  jiraProjectKey String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sprints  Sprint[]
+  sessions Session[]
+
+  @@unique([workspaceId, key])
+}
+
+model Sprint {
+  id        String    @id @default(uuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  goal      String?
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime  @default(now())
+
+  sessions Session[]
+}
+
+// ---------------------------------------------------------------------------
+// Planning sessions
+// ---------------------------------------------------------------------------
+
+enum SessionStatus {
+  DRAFT
+  ACTIVE
+  VOTING
+  REVEALED
+  LOCKED
+  COMPLETED
+  ARCHIVED
+}
+
+enum StoryPriority {
+  LOWEST
+  LOW
+  MEDIUM
+  HIGH
+  HIGHEST
+}
+
+enum StoryType {
+  STORY
+  BUG
+  TASK
+  EPIC
+  SPIKE
+}
+
+model Session {
+  id          String        @id @default(uuid())
+  code        String        @unique // short shareable join code
+  projectId   String?
+  project     Project?      @relation(fields: [projectId], references: [id])
+  sprintId    String?
+  sprint      Sprint?       @relation(fields: [sprintId], references: [id])
+  createdById String
+  createdBy   User          @relation("SessionCreator", fields: [createdById], references: [id])
+
+  sprintName  String
+  sprintGoal  String?
+  estimateScale String      @default("FIBONACCI") // named scale or "CUSTOM"
+  customScale String[]      @default([])           // used when estimateScale = CUSTOM
+  autoReveal  Boolean       @default(false)
+  status      SessionStatus @default(DRAFT)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  scheduledAt DateTime?
+
+  stories      Story[]
+  participants SessionParticipant[]
+
+  @@index([status])
+  @@index([createdById])
+}
+
+enum ParticipantRole {
+  SCRUM_MASTER
+  DEVELOPER
+  OBSERVER
+}
+
+model SessionParticipant {
+  id        String          @id @default(uuid())
+  sessionId String
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ParticipantRole @default(DEVELOPER)
+  isOnline  Boolean         @default(false)
+  joinedAt  DateTime        @default(now())
+  lastSeenAt DateTime       @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+}
+
+model Story {
+  id                 String        @id @default(uuid())
+  sessionId          String
+  session            Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  jiraStoryId        String?
+  title              String
+  description        String?
+  acceptanceCriteria String?
+  businessRules      String?
+  dependencies       String?
+  risks              String?
+  labels             String[]      @default([])
+  priority           StoryPriority @default(MEDIUM)
+  type               StoryType     @default(STORY)
+  order              Int           @default(0)
+  finalEstimate      String?       // locked estimate
+  isLocked           Boolean       @default(false)
+  jiraStatus         String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  rounds Round[]
+
+  @@index([sessionId])
+}
+
+enum RoundStatus {
+  OPEN      // accepting votes
+  REVEALED  // votes visible
+  CLOSED    // superseded by a re-vote or the story was locked
+}
+
+model Round {
+  id             String      @id @default(uuid())
+  storyId        String
+  story          Story       @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  roundNumber    Int
+  status         RoundStatus @default(OPEN)
+  winnerEstimate String?
+  startedAt      DateTime    @default(now())
+  revealedAt     DateTime?
+  closedAt       DateTime?
+
+  votes       Vote[]
+  discussions Discussion[]
+
+  @@unique([storyId, roundNumber])
+  @@index([storyId])
+}
+
+model Vote {
+  id        String   @id @default(uuid())
+  roundId   String
+  round     Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  value     String   // card face: numeric string, "?", "COFFEE", "BREAK", ...
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([roundId, userId]) // one vote per member per round; changeable until reveal
+  @@index([roundId])
+}
+
+enum DiscussionKind {
+  RISK
+  DEPENDENCY
+  ASSUMPTION
+  DECISION
+  COMMENT
+}
+
+model Discussion {
+  id        String         @id @default(uuid())
+  roundId   String
+  round     Round          @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  authorId  String
+  kind      DiscussionKind @default(COMMENT)
+  content   String
+  createdAt DateTime       @default(now())
+
+  @@index([roundId])
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting: notifications & audit
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String   // e.g. SESSION_CREATE, VOTE_REVEAL, STORY_LOCK
+  entity    String?  // entity type
+  entityId  String?
+  ipAddress String?
+  userAgent String?
+  device    String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
