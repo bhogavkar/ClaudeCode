@@ -1,0 +1,3654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>BrainSpark - Ultimate Brain Training Challenge</title>
+<meta name="description" content="BrainSpark - a premium offline brain training game with 40 mini-games, 100 levels, achievements and daily challenges.">
+<style>
+/* =========================================================
+   BRAINSPARK — CORE STYLE SYSTEM
+========================================================= */
+:root{
+  --bg-1:#0b1026;
+  --bg-2:#151a3a;
+  --bg-3:#1e2650;
+  --accent-1:#7c5cff;
+  --accent-2:#00d4ff;
+  --accent-3:#ff5ca8;
+  --accent-4:#ffd166;
+  --accent-5:#37ffb0;
+  --text-1:#f4f6ff;
+  --text-2:#b9c0e8;
+  --text-3:#7d84b3;
+  --danger:#ff5c6c;
+  --success:#37ffb0;
+  --glass-bg:rgba(255,255,255,0.06);
+  --glass-bd:rgba(255,255,255,0.14);
+  --glass-bg-strong:rgba(255,255,255,0.10);
+  --shadow-1: 0 8px 32px rgba(0,0,0,0.35);
+  --radius-lg:24px;
+  --radius-md:16px;
+  --radius-sm:10px;
+  --font-main: 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  color-scheme: dark;
+}
+:root[data-theme="light"]{
+  --bg-1:#eef1ff;
+  --bg-2:#e3e8ff;
+  --bg-3:#dfe4ff;
+  --text-1:#1a1d3a;
+  --text-2:#3a3f6b;
+  --text-3:#666c9c;
+  --glass-bg:rgba(255,255,255,0.55);
+  --glass-bd:rgba(30,40,90,0.12);
+  --glass-bg-strong:rgba(255,255,255,0.75);
+  --shadow-1: 0 8px 32px rgba(60,70,140,0.18);
+  color-scheme: light;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  font-family:var(--font-main);
+  background:
+    radial-gradient(circle at 15% 20%, var(--bg-3) 0%, transparent 45%),
+    radial-gradient(circle at 85% 80%, var(--bg-3) 0%, transparent 45%),
+    linear-gradient(160deg, var(--bg-1), var(--bg-2) 60%, var(--bg-1));
+  background-attachment:fixed;
+  color:var(--text-1);
+  overflow-x:hidden;
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  transition:background 0.4s ease, color 0.4s ease;
+}
+.no-anim, .no-anim *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--glass-bd); border-radius:10px;}
+a{color:inherit;}
+button{font-family:inherit;}
+
+/* Background canvases */
+#bgCanvas{position:fixed; inset:0; z-index:0; width:100%; height:100%; pointer-events:none;}
+#confettiCanvas{position:fixed; inset:0; z-index:9999; width:100%; height:100%; pointer-events:none;}
+
+/* App shell */
+#app{position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column;}
+
+/* Glass card */
+.glass{
+  background:var(--glass-bg);
+  border:1px solid var(--glass-bd);
+  border-radius:var(--radius-lg);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:var(--shadow-1);
+}
+.glass-strong{
+  background:var(--glass-bg-strong);
+  border:1px solid var(--glass-bd);
+  border-radius:var(--radius-md);
+  backdrop-filter:blur(14px) saturate(150%);
+  -webkit-backdrop-filter:blur(14px) saturate(150%);
+}
+
+/* Screens */
+.screen{
+  display:none;
+  flex-direction:column;
+  min-height:100vh;
+  width:100%;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  animation:screenIn 0.45s ease;
+}
+.screen.active{display:flex;}
+@keyframes screenIn{ from{opacity:0; transform:translateY(14px);} to{opacity:1; transform:translateY(0);} }
+
+.container{width:100%; max-width:1180px; margin:0 auto; padding:20px 18px 60px;}
+
+/* Top bar shared across inner screens */
+.topbar{
+  display:flex; align-items:center; gap:12px;
+  padding:14px 18px; position:sticky; top:0; z-index:20;
+  background:linear-gradient(to bottom, var(--bg-1) 65%, transparent);
+}
+.topbar h2{margin:0; font-size:1.15rem; flex:1; letter-spacing:0.3px;}
+.icon-btn{
+  width:44px; height:44px; border-radius:50%; border:1px solid var(--glass-bd);
+  background:var(--glass-bg); color:var(--text-1); font-size:1.1rem; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; transition:transform 0.15s ease, background 0.2s ease;
+  flex-shrink:0;
+}
+.icon-btn:hover{transform:translateY(-2px) scale(1.05); background:var(--glass-bg-strong);}
+.icon-btn:active{transform:scale(0.94);}
+
+/* Buttons */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:14px 26px; border-radius:16px; border:none; cursor:pointer;
+  font-size:1rem; font-weight:600; letter-spacing:0.2px; color:#fff;
+  background:linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  box-shadow:0 6px 20px rgba(124,92,255,0.35);
+  transition:transform 0.15s ease, box-shadow 0.2s ease, filter 0.2s ease;
+  position:relative; overflow:hidden;
+}
+.btn::after{
+  content:""; position:absolute; inset:0; background:radial-gradient(circle, rgba(255,255,255,0.5), transparent 60%);
+  opacity:0; transform:scale(0.4); transition:opacity 0.4s ease, transform 0.4s ease; pointer-events:none;
+}
+.btn:hover{transform:translateY(-3px); box-shadow:0 10px 28px rgba(124,92,255,0.45); filter:brightness(1.06);}
+.btn:active{transform:translateY(0) scale(0.97);}
+.btn:active::after{opacity:1; transform:scale(1); transition:0s;}
+.btn.secondary{background:var(--glass-bg-strong); color:var(--text-1); box-shadow:none; border:1px solid var(--glass-bd);}
+.btn.ghost{background:transparent; border:1px solid var(--glass-bd); box-shadow:none; color:var(--text-1);}
+.btn.danger{background:linear-gradient(135deg,#ff5c6c,#ff8a5c);}
+.btn.success{background:linear-gradient(135deg,#37ffb0,#00d4ff); color:#04231b;}
+.btn.small{padding:9px 16px; font-size:0.85rem; border-radius:12px;}
+.btn.block{width:100%;}
+.btn:disabled{opacity:0.45; cursor:not-allowed; transform:none; filter:none; box-shadow:none;}
+.btn .btn-icon{font-size:1.15em;}
+
+/* Grid helpers */
+.grid{display:grid; gap:16px;}
+.grid-2{grid-template-columns:repeat(2,1fr);}
+.grid-3{grid-template-columns:repeat(3,1fr);}
+.grid-4{grid-template-columns:repeat(4,1fr);}
+.grid-auto{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}
+@media (max-width:640px){
+  .grid-3{grid-template-columns:repeat(2,1fr);}
+  .grid-4{grid-template-columns:repeat(2,1fr);}
+}
+
+/* ---------- HOME SCREEN ---------- */
+#homeScreen .home-wrap{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  padding:26px 18px 60px; gap:22px; width:100%; max-width:640px; margin:0 auto; text-align:center;
+}
+.logo-wrap{display:flex; flex-direction:column; align-items:center; gap:6px; margin-top:6px;}
+.brain-icon{
+  font-size:70px; line-height:1;
+  filter:drop-shadow(0 0 22px rgba(124,92,255,0.65));
+  animation:floaty 3.2s ease-in-out infinite, pulseGlow 2.4s ease-in-out infinite;
+}
+@keyframes floaty{ 0%,100%{transform:translateY(0) rotate(-2deg);} 50%{transform:translateY(-12px) rotate(2deg);} }
+@keyframes pulseGlow{ 0%,100%{filter:drop-shadow(0 0 14px rgba(124,92,255,0.5));} 50%{filter:drop-shadow(0 0 30px rgba(0,212,255,0.75));} }
+.logo-title{
+  font-size:2.5rem; font-weight:800; margin:0; letter-spacing:1px;
+  background:linear-gradient(90deg, var(--accent-2), var(--accent-1), var(--accent-3));
+  background-size:200% auto; -webkit-background-clip:text; background-clip:text; color:transparent;
+  animation:shine 4s linear infinite;
+}
+@keyframes shine{ to{background-position:200% center;} }
+.logo-sub{color:var(--text-2); margin:0; font-size:0.95rem; letter-spacing:2px; text-transform:uppercase;}
+
+.name-card{width:100%; padding:20px; display:flex; flex-direction:column; gap:12px;}
+.name-card input{
+  width:100%; padding:14px 16px; border-radius:14px; border:1px solid var(--glass-bd);
+  background:rgba(0,0,0,0.15); color:var(--text-1); font-size:1rem; outline:none; transition:border-color .2s ease;
+}
+:root[data-theme="light"] .name-card input{background:rgba(255,255,255,0.6);}
+.name-card input:focus{border-color:var(--accent-2);}
+
+.player-chip{
+  display:flex; align-items:center; gap:12px; padding:12px 18px; width:100%;
+}
+.player-avatar{
+  width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:1.5rem; background:linear-gradient(135deg,var(--accent-1),var(--accent-3)); flex-shrink:0;
+  box-shadow:0 4px 14px rgba(124,92,255,0.4);
+}
+.player-meta{flex:1; text-align:left; min-width:0;}
+.player-meta .pname{font-weight:700; font-size:1.05rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.player-meta .prank{color:var(--text-2); font-size:0.8rem;}
+.player-stat-mini{text-align:right; font-size:0.8rem; color:var(--text-2);}
+.player-stat-mini b{color:var(--accent-4); font-size:1rem; display:block;}
+
+.menu-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px; width:100%;}
+.menu-btn{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+  padding:20px 10px; cursor:pointer; transition:transform 0.2s ease, background 0.2s ease;
+  color:var(--text-1); text-align:center;
+}
+.menu-btn:hover{transform:translateY(-4px); background:var(--glass-bg-strong);}
+.menu-btn:active{transform:translateY(-1px) scale(0.97);}
+.menu-btn .mi{font-size:1.8rem;}
+.menu-btn .mt{font-size:0.85rem; font-weight:600;}
+.menu-btn .mb{font-size:0.7rem; color:var(--text-2);}
+
+/* ---------- CURRENCY / HUD BAR ---------- */
+.hud-bar{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; width:100%;}
+.hud-pill{
+  display:flex; align-items:center; gap:6px; padding:8px 14px; border-radius:999px;
+  font-size:0.85rem; font-weight:700;
+}
+.hud-pill .hi{font-size:1rem;}
+
+/* ---------- LEVEL SELECT ---------- */
+.tier-block{margin-bottom:26px;}
+.tier-head{display:flex; align-items:center; gap:10px; margin:0 0 12px 4px;}
+.tier-head .th-badge{
+  width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  font-weight:800; background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); flex-shrink:0;
+}
+.tier-head h3{margin:0; font-size:1rem;}
+.tier-head span{font-size:0.75rem; color:var(--text-2);}
+.level-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:10px;}
+.level-node{
+  aspect-ratio:1; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  cursor:pointer; position:relative; font-weight:800; font-size:1rem; gap:2px;
+  border:1px solid var(--glass-bd); background:var(--glass-bg); transition:transform 0.15s ease;
+}
+.level-node:hover{transform:translateY(-3px) scale(1.04);}
+.level-node.locked{opacity:0.4; cursor:not-allowed; filter:grayscale(0.6);}
+.level-node.locked:hover{transform:none;}
+.level-node.current{box-shadow:0 0 0 3px var(--accent-2), 0 8px 22px rgba(0,212,255,0.35); animation:currentPulse 1.8s ease-in-out infinite;}
+@keyframes currentPulse{ 0%,100%{box-shadow:0 0 0 3px var(--accent-2), 0 8px 22px rgba(0,212,255,0.35);} 50%{box-shadow:0 0 0 6px var(--accent-2), 0 12px 28px rgba(0,212,255,0.55);} }
+.level-node .lstars{font-size:0.6rem; letter-spacing:1px;}
+.level-node .llock{font-size:1.1rem;}
+
+/* ---------- GAME SCREEN ---------- */
+#gameScreen{padding:0;}
+.game-hud{
+  display:flex; align-items:center; gap:10px; padding:12px 14px; flex-wrap:wrap;
+}
+.game-hud .ghud-item{
+  display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:14px; font-weight:700; font-size:0.85rem;
+}
+.game-hud .grow{flex:1;}
+.progress-bar-outer{
+  height:10px; border-radius:999px; background:rgba(0,0,0,0.25); overflow:hidden; width:100%; margin:0 14px 10px;
+}
+:root[data-theme="light"] .progress-bar-outer{background:rgba(0,0,0,0.1);}
+.progress-bar-inner{
+  height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,var(--accent-1),var(--accent-2),var(--accent-5));
+  transition:width 0.3s ease;
+}
+.game-stage{
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px;
+  padding:14px 14px 30px; position:relative; min-height:50vh;
+}
+.game-title-row{text-align:center; margin-bottom:2px;}
+.game-title-row h2{margin:0 0 4px; font-size:1.3rem;}
+.game-title-row p{margin:0; color:var(--text-2); font-size:0.85rem;}
+.game-controls-row{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; padding:10px 14px 20px;}
+
+.stimulus-box{
+  min-height:150px; width:100%; max-width:520px; display:flex; align-items:center; justify-content:center;
+  border-radius:24px; font-size:2.2rem; font-weight:800; padding:20px; text-align:center; word-break:break-word;
+}
+.choice-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:14px; width:100%; max-width:520px;}
+.choice-btn{
+  padding:18px 14px; border-radius:18px; font-size:1.05rem; font-weight:700; cursor:pointer;
+  border:1px solid var(--glass-bd); background:var(--glass-bg); color:var(--text-1);
+  transition:transform 0.15s ease, background 0.2s ease;
+}
+.choice-btn:hover{transform:translateY(-3px);}
+.choice-btn:active{transform:scale(0.96);}
+.choice-btn.correct{background:linear-gradient(135deg,#37ffb0,#00d4ff)!important; color:#04231b!important; animation:correctPulse 0.4s ease;}
+.choice-btn.wrong{background:linear-gradient(135deg,#ff5c6c,#ff8a5c)!important; color:#fff!important; animation:shake 0.4s ease;}
+@keyframes correctPulse{ 0%{transform:scale(1);} 50%{transform:scale(1.08);} 100%{transform:scale(1);} }
+@keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-8px);} 75%{transform:translateX(8px);} }
+
+.tile-grid{display:grid; gap:10px; justify-content:center;}
+.mem-tile{
+  border-radius:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
+  font-size:1.6rem; font-weight:800; border:1px solid var(--glass-bd); background:var(--glass-bg);
+  transition:transform 0.12s ease, background 0.25s ease; position:relative; overflow:hidden;
+}
+.mem-tile.flippable{transform-style:preserve-3d;}
+.mem-tile:active{transform:scale(0.94);}
+.mem-tile.lit{background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); color:#fff; box-shadow:0 0 24px rgba(124,92,255,0.6);}
+.mem-tile.matched{background:linear-gradient(135deg,#37ffb0,#00d4ff); color:#04231b; opacity:0.55; cursor:default;}
+.mem-tile.disabled{pointer-events:none;}
+
+.text-input-row{display:flex; gap:10px; width:100%; max-width:420px;}
+.text-input-row input{
+  flex:1; padding:14px 16px; border-radius:14px; border:1px solid var(--glass-bd); background:rgba(0,0,0,0.15);
+  color:var(--text-1); font-size:1.1rem; text-align:center; outline:none;
+}
+:root[data-theme="light"] .text-input-row input{background:rgba(255,255,255,0.6);}
+
+/* Card flip base for Memory Cards */
+.flip-card{width:100%; height:100%; perspective:600px;}
+.flip-inner{position:relative; width:100%; height:100%; transition:transform 0.5s; transform-style:preserve-3d;}
+.flip-card.flipped .flip-inner{transform:rotateY(180deg);}
+.flip-face{position:absolute; inset:0; backface-visibility:hidden; border-radius:16px; display:flex; align-items:center; justify-content:center; font-size:1.6rem; font-weight:800;}
+.flip-front{background:linear-gradient(135deg,var(--accent-1),var(--accent-3)); color:#fff;}
+.flip-back{background:var(--glass-bg-strong); transform:rotateY(180deg); border:1px solid var(--glass-bd);}
+
+/* toast + popups */
+.toast-wrap{position:fixed; top:16px; left:50%; transform:translateX(-50%); z-index:500; display:flex; flex-direction:column; gap:10px; align-items:center; pointer-events:none;}
+.toast{
+  padding:12px 22px; border-radius:16px; font-weight:700; font-size:0.9rem; display:flex; align-items:center; gap:10px;
+  animation:toastIn 0.4s ease, toastOut 0.4s ease 2.6s forwards; box-shadow:var(--shadow-1);
+}
+@keyframes toastIn{ from{opacity:0; transform:translateY(-20px) scale(0.9);} to{opacity:1; transform:translateY(0) scale(1);} }
+@keyframes toastOut{ to{opacity:0; transform:translateY(-14px) scale(0.95);} }
+
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(4,6,20,0.6); z-index:600; display:none; align-items:center; justify-content:center; padding:20px;
+  backdrop-filter:blur(6px); animation:fadeIn 0.25s ease;
+}
+.modal-overlay.active{display:flex;}
+@keyframes fadeIn{ from{opacity:0;} to{opacity:1;} }
+.modal-box{width:100%; max-width:440px; padding:26px; text-align:center; animation:popIn 0.35s cubic-bezier(.2,1.4,.4,1);}
+@keyframes popIn{ from{opacity:0; transform:scale(0.85) translateY(20px);} to{opacity:1; transform:scale(1) translateY(0);} }
+.modal-box h2{margin-top:0;}
+
+.achv-toast-icon{font-size:1.6rem;}
+
+/* results screen */
+.result-hero{text-align:center; padding:10px 20px;}
+.result-stars{font-size:2.4rem; letter-spacing:8px; margin:6px 0;}
+.result-score{font-size:2.8rem; font-weight:800; background:linear-gradient(90deg,var(--accent-4),var(--accent-3)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.result-stats{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; width:100%; max-width:460px; margin:16px auto;}
+.result-stat-card{padding:14px; text-align:center;}
+.result-stat-card .rv{font-size:1.3rem; font-weight:800; color:var(--accent-2);}
+.result-stat-card .rl{font-size:0.72rem; color:var(--text-2); text-transform:uppercase; letter-spacing:0.5px;}
+
+/* Achievements grid */
+.achv-card{padding:16px; display:flex; gap:12px; align-items:center;}
+.achv-card .ai{font-size:1.8rem; width:48px; text-align:center; flex-shrink:0;}
+.achv-card.locked{opacity:0.4; filter:grayscale(0.7);}
+.achv-card .at{font-weight:700; font-size:0.92rem;}
+.achv-card .ad{font-size:0.75rem; color:var(--text-2);}
+.achv-progress{height:6px; border-radius:4px; background:rgba(0,0,0,0.25); margin-top:6px; overflow:hidden;}
+.achv-progress i{display:block; height:100%; background:linear-gradient(90deg,var(--accent-1),var(--accent-2));}
+
+/* settings */
+.setting-row{display:flex; align-items:center; justify-content:space-between; padding:16px 18px; gap:14px;}
+.setting-row .sr-label{font-weight:600; font-size:0.95rem;}
+.setting-row .sr-sub{font-size:0.75rem; color:var(--text-2);}
+.switch{position:relative; width:52px; height:30px; border-radius:20px; background:rgba(120,120,150,0.35); cursor:pointer; flex-shrink:0; transition:background .2s ease;}
+.switch.on{background:linear-gradient(135deg,var(--accent-1),var(--accent-2));}
+.switch .knob{position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%; background:#fff; transition:left .2s ease; box-shadow:0 2px 6px rgba(0,0,0,0.3);}
+.switch.on .knob{left:25px;}
+
+/* calendar */
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+.cal-cell{aspect-ratio:1; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:0.7rem; background:rgba(255,255,255,0.04); border:1px solid var(--glass-bd);}
+.cal-cell.played{background:linear-gradient(135deg,var(--accent-1),var(--accent-2)); color:#fff; font-weight:700;}
+.cal-cell.today{box-shadow:0 0 0 2px var(--accent-4);}
+
+/* meters */
+.meter{height:14px; border-radius:999px; background:rgba(0,0,0,0.25); overflow:hidden;}
+.meter i{display:block; height:100%; border-radius:999px;}
+
+/* misc */
+.section-title{font-size:1.05rem; font-weight:800; margin:22px 4px 12px;}
+.muted{color:var(--text-2);}
+.center{text-align:center;}
+.flex-row{display:flex; align-items:center; gap:10px;}
+.spacer{flex:1;}
+.badge{display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:999px; font-size:0.72rem; font-weight:700; background:var(--glass-bg-strong); border:1px solid var(--glass-bd);}
+.hidden{display:none !important;}
+
+.loader-wrap{position:fixed; inset:0; z-index:2000; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px; background:var(--bg-1); transition:opacity 0.5s ease;}
+.loader-brain{font-size:60px; animation:floaty 1.6s ease-in-out infinite;}
+.loader-bar{width:220px; height:8px; border-radius:999px; background:rgba(255,255,255,0.1); overflow:hidden;}
+.loader-bar i{display:block; height:100%; width:0%; background:linear-gradient(90deg,var(--accent-1),var(--accent-2)); animation:loadFill 1.4s ease forwards;}
+@keyframes loadFill{ to{width:100%;} }
+
+.confetti-piece{position:absolute; will-change:transform;}
+
+@media (max-width:480px){
+  .logo-title{font-size:2rem;}
+  .brain-icon{font-size:56px;}
+  .menu-grid{grid-template-columns:repeat(2,1fr);}
+  .result-score{font-size:2.2rem;}
+}
+</style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<canvas id="confettiCanvas"></canvas>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="loader-wrap" id="loaderWrap">
+  <div class="loader-brain">🧠</div>
+  <div style="font-weight:800; letter-spacing:2px; font-size:1.1rem;">BRAINSPARK</div>
+  <div class="loader-bar"><i></i></div>
+</div>
+
+<div id="app">
+<!-- ============ HOME SCREEN ============ -->
+<section class="screen" id="homeScreen">
+  <div class="home-wrap">
+    <div class="logo-wrap">
+      <div class="brain-icon">🧠</div>
+      <h1 class="logo-title">BrainSpark</h1>
+      <p class="logo-sub">Ultimate Brain Training Challenge</p>
+    </div>
+
+    <div class="glass name-card" id="nameEntryCard">
+      <div style="font-weight:700;">Welcome! What should we call you?</div>
+      <input type="text" id="nameInput" maxlength="18" placeholder="Enter your name">
+      <button class="btn block" id="saveNameBtn">🚀 Start Training</button>
+    </div>
+
+    <div class="glass player-chip" id="playerChip" style="display:none;">
+      <div class="player-avatar" id="playerAvatar">🙂</div>
+      <div class="player-meta">
+        <div class="pname" id="playerNameDisp">Player</div>
+        <div class="prank" id="playerRankDisp">Beginner · Level 1</div>
+      </div>
+      <div class="player-stat-mini"><b id="playerCoinsDisp">0</b>Coins</div>
+    </div>
+
+    <div class="hud-bar" id="homeHudBar"></div>
+
+    <div class="menu-grid">
+      <div class="menu-btn glass" data-nav="levelSelectScreen" id="continueBtn"><div class="mi">▶️</div><div class="mt">Continue</div><div class="mb">Resume progress</div></div>
+      <div class="menu-btn glass" id="newGameBtn"><div class="mi">✨</div><div class="mt">New Game</div><div class="mb">Reset &amp; restart</div></div>
+      <div class="menu-btn glass" data-nav="dailyScreen"><div class="mi">📅</div><div class="mt">Daily Challenge</div><div class="mb">Fresh puzzle today</div></div>
+      <div class="menu-btn glass" data-nav="leaderboardScreen"><div class="mi">🏆</div><div class="mt">Leaderboard</div><div class="mb">Local best scores</div></div>
+      <div class="menu-btn glass" data-nav="statsScreen"><div class="mi">📊</div><div class="mt">Statistics</div><div class="mb">Your performance</div></div>
+      <div class="menu-btn glass" data-nav="achvScreen"><div class="mi">🎖️</div><div class="mt">Achievements</div><div class="mb">Badges &amp; trophies</div></div>
+      <div class="menu-btn glass" data-nav="settingsScreen"><div class="mi">⚙️</div><div class="mt">Settings</div><div class="mb">Customize game</div></div>
+      <div class="menu-btn glass" data-nav="instructionsScreen"><div class="mi">📘</div><div class="mt">Instructions</div><div class="mb">How to play</div></div>
+    </div>
+
+    <div class="glass" style="padding:14px 18px; width:100%; margin-top:6px;">
+      <div style="font-size:0.72rem; color:var(--text-2); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">💡 Brain Tip of the Day</div>
+      <div id="brainTipText" style="font-size:0.9rem;">Loading tip...</div>
+    </div>
+    <div style="font-size:0.7rem; color:var(--text-3); margin-top:10px;">v1.0 · Works fully offline · Progress saved automatically</div>
+  </div>
+</section>
+
+<!-- ============ LEVEL SELECT ============ -->
+<section class="screen" id="levelSelectScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Level Select</h2><div class="badge" id="levelSelectProgress">0/100</div></div>
+  <div class="container" id="tiersContainer"></div>
+</section>
+
+<!-- ============ GAME SCREEN ============ -->
+<section class="screen" id="gameScreen">
+  <div class="game-hud">
+    <button class="icon-btn" id="pauseBtn">⏸️</button>
+    <div class="ghud-item glass-strong">⏱️ <span id="hudTimer">--</span></div>
+    <div class="ghud-item glass-strong">⭐ <span id="hudScore">0</span></div>
+    <div class="ghud-item glass-strong" id="hudLivesWrap">❤️ <span id="hudLives">3</span></div>
+    <div class="ghud-item glass-strong" id="hudComboWrap">🔥 <span id="hudCombo">x1</span></div>
+    <div class="grow"></div>
+    <button class="icon-btn" id="hintBtn" title="Hint">💡</button>
+    <button class="icon-btn" id="skipBtn" title="Skip">⏭️</button>
+  </div>
+  <div class="progress-bar-outer"><div class="progress-bar-inner" id="gameProgressBar"></div></div>
+  <div class="game-title-row">
+    <h2 id="gameTitleText">Game</h2>
+    <p id="gameSubText">Instructions</p>
+  </div>
+  <div class="game-stage" id="gameStage"></div>
+  <div id="countdownOverlay" class="modal-overlay">
+    <div style="font-size:5rem; font-weight:800; color:#fff;" id="countdownNum">3</div>
+  </div>
+</section>
+
+<!-- ============ RESULTS SCREEN ============ -->
+<section class="screen" id="resultsScreen">
+  <div class="container">
+    <div class="glass result-hero">
+      <div style="font-size:0.8rem; letter-spacing:2px; color:var(--text-2); text-transform:uppercase;" id="resultTitle">Level Complete</div>
+      <div class="result-stars" id="resultStars">⭐⭐⭐</div>
+      <div class="result-score" id="resultScore">0</div>
+      <div class="muted" style="font-size:0.85rem;">Brain Points Earned</div>
+    </div>
+    <div class="result-stats" id="resultStatsGrid"></div>
+    <div id="achvUnlockedBox"></div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap; justify-content:center; margin-top:20px;">
+      <button class="btn secondary" id="resultRetryBtn">🔁 Retry</button>
+      <button class="btn secondary" data-nav="levelSelectScreen">🗺️ Levels</button>
+      <button class="btn success" id="resultNextBtn">Next Level ➡️</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DAILY CHALLENGE ============ -->
+<section class="screen" id="dailyScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Daily Challenge</h2><div style="width:44px;"></div></div>
+  <div class="container" id="dailyContainer"></div>
+</section>
+
+<!-- ============ LEADERBOARD ============ -->
+<section class="screen" id="leaderboardScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Local Leaderboard</h2><div style="width:44px;"></div></div>
+  <div class="container" id="leaderboardContainer"></div>
+</section>
+
+<!-- ============ STATISTICS ============ -->
+<section class="screen" id="statsScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Statistics</h2><div style="width:44px;"></div></div>
+  <div class="container" id="statsContainer"></div>
+</section>
+
+<!-- ============ ACHIEVEMENTS ============ -->
+<section class="screen" id="achvScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Achievements</h2><div class="badge" id="achvCountBadge">0/0</div></div>
+  <div class="container" id="achvContainer"></div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="screen" id="settingsScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>Settings</h2><div style="width:44px;"></div></div>
+  <div class="container" id="settingsContainer"></div>
+</section>
+
+<!-- ============ INSTRUCTIONS ============ -->
+<section class="screen" id="instructionsScreen">
+  <div class="topbar"><button class="icon-btn" data-nav="homeScreen">←</button><h2>How To Play</h2><div style="width:44px;"></div></div>
+  <div class="container" id="instructionsContainer"></div>
+</section>
+
+</div><!-- /#app -->
+
+<!-- Achievement popup modal -->
+<div class="modal-overlay" id="achvModal">
+  <div class="glass modal-box">
+    <div class="achv-toast-icon" id="achvModalIcon" style="font-size:3rem;">🏆</div>
+    <h2>Achievement Unlocked!</h2>
+    <div id="achvModalName" style="font-weight:700; font-size:1.1rem;"></div>
+    <div id="achvModalDesc" class="muted" style="margin:8px 0 18px;"></div>
+    <button class="btn block" id="achvModalClose">Nice!</button>
+  </div>
+</div>
+
+<!-- Generic confirm modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="glass modal-box">
+    <h2 id="confirmTitle">Are you sure?</h2>
+    <div id="confirmDesc" class="muted" style="margin-bottom:18px;"></div>
+    <div style="display:flex; gap:12px;">
+      <button class="btn ghost block" id="confirmCancelBtn">Cancel</button>
+      <button class="btn danger block" id="confirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pause modal -->
+<div class="modal-overlay" id="pauseModal">
+  <div class="glass modal-box">
+    <div style="font-size:2.6rem;">⏸️</div>
+    <h2>Paused</h2>
+    <div class="muted" style="margin-bottom:18px;">Score: <b id="pauseScoreText">0</b></div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <button class="btn block" id="pauseResumeBtn">▶️ Resume</button>
+      <button class="btn secondary block" id="pauseRestartBtn">🔁 Restart Level</button>
+      <button class="btn ghost block" id="pauseQuitBtn">🚪 Quit to Levels</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lucky Spin / Mystery Box / Reward Chest modal -->
+<div class="modal-overlay" id="bonusModal">
+  <div class="glass modal-box" id="bonusModalBox">
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================
+   BRAINSPARK ENGINE — PART 1: CONSTANTS, UTILS, STORAGE,
+   AUDIO, BACKGROUND FX, NAVIGATION, PROFILE/RANK CORE
+========================================================= */
+
+/* ---------- Small DOM helpers ---------- */
+const $  = (sel, root) => (root||document).querySelector(sel);
+const $$ = (sel, root) => Array.from((root||document).querySelectorAll(sel));
+function el(tag, cls, html){ const e=document.createElement(tag); if(cls) e.className=cls; if(html!==undefined) e.innerHTML=html; return e; }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+function rndInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+function rndFloat(min,max){ return Math.random()*(max-min)+min; }
+function choice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function uniqueSample(arr, n){ return shuffle(arr).slice(0, n); }
+function pad2(n){ return n<10 ? '0'+n : ''+n; }
+function fmtTime(sec){ sec=Math.max(0,Math.ceil(sec)); return Math.floor(sec/60)+':'+pad2(sec%60); }
+function fmtNum(n){ n=Math.round(n||0); return n.toLocaleString('en-US'); }
+function dateKey(d){ d=d||new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function daysBetween(a,b){ const A=new Date(a+'T00:00:00'), B=new Date(b+'T00:00:00'); return Math.round((B-A)/86400000); }
+function mulberry32(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function seedFromString(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19; } return (h^(h>>>16))>>>0; }
+function safeJSONParse(str, fallback){ try{ const v=JSON.parse(str); return v==null?fallback:v; }catch(e){ return fallback; } }
+function vibrate(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
+
+/* ---------- Game type registry (40 games across 10 tiers of 4) ---------- */
+const GAME_KEYS = [
+  'memoryCards','patternRecall','numberMemory','wordMemory',
+  'sequenceMemory','simonSays','quickMath','mentalArithmetic',
+  'missingNumber','oddOneOut','shapeMatching','colorMatching',
+  'reflexTap','speedClick','visualSearch','findDifferences',
+  'sudokuLite','logicGrid','mazeEscape','connectDots',
+  'spotPattern','rotateShape','clockReading','directionMemory',
+  'alphabetSequence','wordBuilder','unscrambleWord','spellingChallenge',
+  'vocabularyQuiz','generalIQQuiz','trivia','codingLogicPuzzle',
+  'emojiMemory','symbolMatching','concentrationTest','focusChallenge',
+  'colorSequence','soundMemory','reactionTimer','dualTaskChallenge'
+];
+const GAME_META = {
+  memoryCards:{name:'Memory Cards', icon:'🃏', desc:'Flip cards and match every pair.'},
+  patternRecall:{name:'Pattern Recall', icon:'🔲', desc:'Memorize the lit tiles, then repeat the pattern.'},
+  numberMemory:{name:'Number Memory', icon:'🔢', desc:'Remember the number, then type it back.'},
+  wordMemory:{name:'Word Memory', icon:'📝', desc:'Remember the word list, then spot which ones appeared.'},
+  sequenceMemory:{name:'Sequence Memory', icon:'🔗', desc:'Watch the tile order, then reproduce it exactly.'},
+  simonSays:{name:'Simon Says', icon:'🎛️', desc:'Repeat the growing color sequence.'},
+  quickMath:{name:'Quick Math', icon:'➕', desc:'Solve simple arithmetic before time runs out.'},
+  mentalArithmetic:{name:'Mental Arithmetic', icon:'🧮', desc:'Chain several operations in your head.'},
+  missingNumber:{name:'Missing Number', icon:'❓', desc:'Find the missing number in the sequence.'},
+  oddOneOut:{name:'Odd One Out', icon:'🔍', desc:'Spot the item that does not belong.'},
+  shapeMatching:{name:'Shape Matching', icon:'🔷', desc:'Match the shape to its identical twin.'},
+  colorMatching:{name:'Color Matching', icon:'🎨', desc:'Match the color name to the right swatch.'},
+  reflexTap:{name:'Reflex Tap', icon:'⚡', desc:'Tap the target the instant it appears.'},
+  speedClick:{name:'Speed Click', icon:'🖱️', desc:'Click as many targets as you can before time runs out.'},
+  visualSearch:{name:'Visual Search', icon:'🔎', desc:'Find the requested icon among distractors.'},
+  findDifferences:{name:'Find Differences', icon:'🪞', desc:'Spot the one tile that differs between two grids.'},
+  sudokuLite:{name:'Sudoku Lite', icon:'🧩', desc:'Fill the 4x4 grid so every row, column and box holds 1-4.'},
+  logicGrid:{name:'Logic Grid', icon:'🧠', desc:'Use the clue to deduce the correct answer.'},
+  mazeEscape:{name:'Maze Escape', icon:'🌀', desc:'Guide the dot through the maze to the exit.'},
+  connectDots:{name:'Connect Dots', icon:'⚫', desc:'Click the numbered dots in ascending order.'},
+  spotPattern:{name:'Spot Pattern', icon:'🧬', desc:'Choose the shape that completes the pattern.'},
+  rotateShape:{name:'Rotate Shape', icon:'🔄', desc:'Decide if the two shapes are the same, just rotated.'},
+  clockReading:{name:'Clock Reading', icon:'🕐', desc:'Read the analog clock and pick the correct time.'},
+  directionMemory:{name:'Direction Memory', icon:'➡️', desc:'Memorize the arrow sequence, then repeat it.'},
+  alphabetSequence:{name:'Alphabet Sequence', icon:'🔤', desc:'Pick the letter that continues the sequence.'},
+  wordBuilder:{name:'Word Builder', icon:'🧱', desc:'Arrange the letter tiles to build the target word.'},
+  unscrambleWord:{name:'Unscramble Word', icon:'🔀', desc:'Unscramble the letters to reveal the hidden word.'},
+  spellingChallenge:{name:'Spelling Challenge', icon:'✏️', desc:'Study the word briefly, then spell it from memory.'},
+  vocabularyQuiz:{name:'Vocabulary Quiz', icon:'📖', desc:'Pick the correct definition of the word.'},
+  generalIQQuiz:{name:'General IQ Quiz', icon:'🎓', desc:'Answer general reasoning questions.'},
+  trivia:{name:'Trivia', icon:'🌐', desc:'Answer general knowledge trivia questions.'},
+  codingLogicPuzzle:{name:'Coding Logic Puzzle', icon:'💻', desc:'Predict the output of the simple pseudo-code.'},
+  emojiMemory:{name:'Emoji Memory', icon:'😀', desc:'Memorize emoji positions, then recall where they were.'},
+  symbolMatching:{name:'Symbol Matching', icon:'♻️', desc:'Match the symbol shown to its identical partner fast.'},
+  concentrationTest:{name:'Concentration Test', icon:'🧘', desc:'Ignore the color of the word — tap what it says.'},
+  focusChallenge:{name:'Focus Challenge', icon:'🎯', desc:'Tap only the target icon, ignore all distractors.'},
+  colorSequence:{name:'Color Sequence', icon:'🌈', desc:'A bigger, longer color-position memory challenge.'},
+  soundMemory:{name:'Sound Memory', icon:'🔊', desc:'Listen to the tone sequence, then replay it in order.'},
+  reactionTimer:{name:'Reaction Timer', icon:'⏱️', desc:'Click the instant the circle turns green.'},
+  dualTaskChallenge:{name:'Dual Task Challenge', icon:'🌀', desc:'Answer the math prompt while tracking a background count.'}
+};
+const RANKS = ['Beginner','Learner','Explorer','Thinker','Solver','Master','Elite','Grand Master','Legend','Brain Genius'];
+const TOTAL_LEVELS = 100;
+function tierOfLevel(lv){ return clamp(Math.ceil(lv/10),1,10); }
+function rankNameForTier(tier){ return RANKS[clamp(tier,1,10)-1]; }
+function gamesForTier(tier){ const start=(tier-1)*4; return GAME_KEYS.slice(start,start+4); }
+function gameKeyForLevel(lv){
+  const tier = tierOfLevel(lv);
+  const pool = gamesForTier(tier);
+  const idxInTier = (lv-1)%10;
+  return pool[idxInTier % pool.length];
+}
+function difficultyForLevel(lv){
+  const tier = tierOfLevel(lv);
+  const posInTier = ((lv-1)%10)+1; // 1..10
+  return { tier, posInTier, level:lv, factor: tier + posInTier/10 };
+}
+
+/* ---------- Storage layer ---------- */
+const LS_PROFILE='bs_profile_v1', LS_SETTINGS='bs_settings_v1', LS_BOARD='bs_leaderboard_v1';
+function defaultProfile(){
+  return {
+    name:'', createdAt:Date.now(), lastPlayed:null,
+    xp:0, coins:150, bp:0, highestScore:0,
+    unlockedLevels:1, levelStars:{}, levelBest:{},
+    streakCurrent:0, streakBest:0,
+    dailyStreak:0, lastDailyDate:null, lastDailyBonusDate:null,
+    gamesPlayed:0, gamesWon:0, gamesLost:0,
+    totalCorrect:0, totalWrong:0,
+    bestReactionMs:null, reactionSum:0, reactionCount:0,
+    highestCombo:0,
+    perGame:{}, // gameKey -> {played,won,correct,wrong,best}
+    achievements:[],
+    moodLog:{}, calendar:{},
+    lastSpinDate:null, lastMysteryDate:null,
+    focusMeterSeed: rndInt(55,75),
+    perfectRounds:0, fastAnswers:0, spinsUsed:0, mysteryBoxesOpened:0, chestsOpened:0,
+    weeklyProgress:0, weeklyKey:null, monthlyProgress:0, monthlyKey:null,
+    coinsEarnedTotal:0, cleanStreak:0, weeklyCompletedCount:0, monthlyCompletedCount:0,
+    weeklyRewardGiven:false, monthlyRewardGiven:false, chestClaimedTier:0
+  };
+}
+function defaultSettings(){
+  return { theme:'dark', music:true, sound:true, animations:true };
+}
+function loadProfile(){
+  const p = safeJSONParse(localStorage.getItem(LS_PROFILE), null);
+  if(!p) return defaultProfile();
+  const d = defaultProfile();
+  for(const k in d){ if(p[k]===undefined) p[k]=d[k]; }
+  return p;
+}
+function saveProfile(){ try{ localStorage.setItem(LS_PROFILE, JSON.stringify(State.profile)); }catch(e){ console.warn('save profile failed', e); } }
+function loadSettings(){
+  const s = safeJSONParse(localStorage.getItem(LS_SETTINGS), null);
+  const d = defaultSettings();
+  if(!s) return d;
+  for(const k in d){ if(s[k]===undefined) s[k]=d[k]; }
+  return s;
+}
+function saveSettings(){ try{ localStorage.setItem(LS_SETTINGS, JSON.stringify(State.settings)); }catch(e){ console.warn('save settings failed', e); } }
+function loadBoard(){ return safeJSONParse(localStorage.getItem(LS_BOARD), []); }
+function saveBoard(board){ try{ localStorage.setItem(LS_BOARD, JSON.stringify(board.slice(0,50))); }catch(e){} }
+
+/* ---------- Global state ---------- */
+const State = {
+  profile: loadProfile(),
+  settings: loadSettings(),
+  screenStack:['homeScreen'],
+  currentLevel:null,
+  isDaily:false
+};
+
+function xpToNextLevel(rankTier){ return 500 + (rankTier-1)*250; }
+function totalXPForRankProgress(){
+  const tier = tierOfLevel(clamp(State.profile.unlockedLevels,1,100));
+  return tier;
+}
+
+/* ---------- Audio engine (WebAudio synthesized, no files) ---------- */
+const Audio1 = (function(){
+  let ctx=null, musicNodes=null, musicPlaying=false;
+  function getCtx(){ if(!ctx){ try{ ctx = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ ctx=null; } } return ctx; }
+  function tone(freq, dur, type, vol, delay){
+    if(!State.settings.sound) return;
+    const c = getCtx(); if(!c) return;
+    try{
+      const t0 = c.currentTime + (delay||0);
+      const osc = c.createOscillator(); const gain = c.createGain();
+      osc.type = type||'sine'; osc.frequency.setValueAtTime(freq, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(clamp(vol||0.2,0.001,1), t0+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+      osc.connect(gain); gain.connect(c.destination);
+      osc.start(t0); osc.stop(t0+dur+0.02);
+    }catch(e){}
+  }
+  return {
+    click(){ tone(440,0.08,'square',0.12); },
+    correct(){ tone(660,0.1,'sine',0.18); tone(880,0.14,'sine',0.15,0.09); },
+    wrong(){ tone(180,0.22,'sawtooth',0.16); },
+    countdown(){ tone(523,0.12,'square',0.16); },
+    go(){ tone(784,0.22,'square',0.2); },
+    levelup(){ [523,659,784,1047].forEach((f,i)=>tone(f,0.18,'sine',0.18,i*0.09)); },
+    achievement(){ [660,880,1108,1320].forEach((f,i)=>tone(f,0.16,'triangle',0.16,i*0.07)); },
+    coin(){ tone(988,0.08,'square',0.14); tone(1318,0.1,'square',0.12,0.05); },
+    playTone(freq){ tone(freq,0.35,'sine',0.22); },
+    tick(){ tone(300,0.05,'square',0.06); },
+    startMusic(){
+      if(!State.settings.music || musicPlaying) return;
+      const c=getCtx(); if(!c) return;
+      try{
+        musicPlaying = true;
+        const master = c.createGain(); master.gain.value=0.05; master.connect(c.destination);
+        const notes=[196,220,246.94,196,164.81,196,220,261.63];
+        let idx=0;
+        const interval = setInterval(()=>{
+          if(!musicPlaying || !State.settings.music){ return; }
+          const t0=c.currentTime;
+          const osc=c.createOscillator(); const g=c.createGain();
+          osc.type='sine'; osc.frequency.setValueAtTime(notes[idx%notes.length], t0);
+          g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.4,t0+0.4); g.gain.exponentialRampToValueAtTime(0.0001,t0+1.6);
+          osc.connect(g); g.connect(master); osc.start(t0); osc.stop(t0+1.7);
+          idx++;
+        }, 900);
+        musicNodes = {interval, master};
+      }catch(e){}
+    },
+    stopMusic(){
+      musicPlaying=false;
+      if(musicNodes){ clearInterval(musicNodes.interval); try{musicNodes.master.disconnect();}catch(e){} musicNodes=null; }
+    },
+    resume(){ const c=getCtx(); if(c && c.state==='suspended') c.resume().catch(()=>{}); }
+  };
+})();
+
+/* ---------- Background particle canvas ---------- */
+const BgFX = (function(){
+  const canvas = document.getElementById('bgCanvas');
+  const ctx = canvas.getContext('2d');
+  let particles=[], raf=null, w=0, h=0;
+  function resize(){ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; }
+  function init(){
+    resize();
+    particles = Array.from({length: Math.min(60, Math.floor(w/24))}, ()=>({
+      x:Math.random()*w, y:Math.random()*h, r:Math.random()*2.2+0.6,
+      vx:(Math.random()-0.5)*0.25, vy:(Math.random()-0.5)*0.25,
+      hue: choice([260,190,320,45])
+    }));
+  }
+  function step(){
+    if(!State.settings.animations){ ctx.clearRect(0,0,w,h); raf=requestAnimationFrame(step); return; }
+    ctx.clearRect(0,0,w,h);
+    for(const p of particles){
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0) p.x=w; if(p.x>w) p.x=0; if(p.y<0) p.y=h; if(p.y>h) p.y=0;
+      ctx.beginPath();
+      ctx.fillStyle = `hsla(${p.hue},90%,70%,0.55)`;
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    }
+    // faint connecting lines
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const a=particles[i], b=particles[j];
+        const dx=a.x-b.x, dy=a.y-b.y, dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<110){
+          ctx.strokeStyle = `rgba(140,150,255,${0.10*(1-dist/110)})`;
+          ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+        }
+      }
+    }
+    raf=requestAnimationFrame(step);
+  }
+  window.addEventListener('resize', resize);
+  return { init(){ init(); if(!raf) step(); } };
+})();
+
+/* ---------- Confetti ---------- */
+const Confetti = (function(){
+  const canvas = document.getElementById('confettiCanvas');
+  const ctx = canvas.getContext('2d');
+  let pieces=[], raf=null;
+  function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+  window.addEventListener('resize', resize); resize();
+  function burst(count){
+    if(!State.settings.animations) return;
+    count = count||120;
+    const colors=['#7c5cff','#00d4ff','#ff5ca8','#ffd166','#37ffb0'];
+    for(let i=0;i<count;i++){
+      pieces.push({
+        x: canvas.width/2 + rndFloat(-80,80), y: canvas.height*0.25 + rndFloat(-40,40),
+        vx: rndFloat(-6,6), vy: rndFloat(-9,-2), rot: rndFloat(0,Math.PI*2), vr: rndFloat(-0.2,0.2),
+        size: rndFloat(6,11), color: choice(colors), life:0, maxLife: rndInt(70,120)
+      });
+    }
+    if(!raf) loop();
+  }
+  function loop(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.vy += 0.16; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; p.life++;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.fillStyle=p.color; ctx.globalAlpha = clamp(1-p.life/p.maxLife,0,1);
+      ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+      ctx.restore();
+    });
+    pieces = pieces.filter(p=>p.life<p.maxLife && p.y<canvas.height+40);
+    if(pieces.length){ raf=requestAnimationFrame(loop); } else { raf=null; ctx.clearRect(0,0,canvas.width,canvas.height); }
+  }
+  return { burst };
+})();
+
+/* ---------- Toast ---------- */
+function showToast(msg, icon){
+  const wrap = $('#toastWrap');
+  const t = el('div','toast glass-strong', `<span style="font-size:1.1rem;">${icon||'✨'}</span><span>${msg}</span>`);
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.remove(); }, 3100);
+}
+
+/* ---------- Navigation ---------- */
+function showScreen(id, opts){
+  opts=opts||{};
+  $$('.screen').forEach(s=>s.classList.remove('active'));
+  const target = document.getElementById(id);
+  if(!target) return;
+  target.classList.add('active');
+  window.scrollTo(0,0);
+  if(!opts.replace){
+    if(State.screenStack[State.screenStack.length-1] !== id) State.screenStack.push(id);
+  }
+  Router.onShow(id);
+}
+function goBack(){
+  if(State.screenStack.length>1){ State.screenStack.pop(); }
+  showScreen(State.screenStack[State.screenStack.length-1]||'homeScreen', {replace:true});
+}
+const Router = { onShow(id){ try{ ScreenRenderers[id] && ScreenRenderers[id](); }catch(e){ console.error('render error', id, e); } } };
+const ScreenRenderers = {}; // populated later per screen
+
+document.addEventListener('click', (e)=>{
+  const navEl = e.target.closest('[data-nav]');
+  if(navEl){
+    Audio1.resume(); Audio1.click();
+    showScreen(navEl.getAttribute('data-nav'));
+  }
+});
+
+/* ---------- Confirm modal helper ---------- */
+function confirmDialog(title, desc, onConfirm){
+  $('#confirmTitle').textContent = title;
+  $('#confirmDesc').textContent = desc;
+  const modal = $('#confirmModal');
+  modal.classList.add('active');
+  const okBtn = $('#confirmOkBtn'), cancelBtn = $('#confirmCancelBtn');
+  function cleanup(){ modal.classList.remove('active'); okBtn.onclick=null; cancelBtn.onclick=null; }
+  okBtn.onclick = ()=>{ cleanup(); onConfirm && onConfirm(); };
+  cancelBtn.onclick = ()=>{ cleanup(); };
+}
+
+/* ---------- Profile helpers ---------- */
+function ensurePerGame(key){
+  if(!State.profile.perGame[key]) State.profile.perGame[key] = {played:0,won:0,correct:0,wrong:0,best:0};
+  return State.profile.perGame[key];
+}
+function currentRankTier(){ return tierOfLevel(clamp(State.profile.unlockedLevels,1,100)); }
+function currentRankName(){ return rankNameForTier(currentRankTier()); }
+function addCoins(n){ n=Math.round(n); State.profile.coins = Math.max(0, State.profile.coins + n); if(n>0) State.profile.coinsEarnedTotal += n; }
+function addXP(n){ State.profile.xp += Math.max(0,Math.round(n)); }
+function addBP(n){ State.profile.bp += Math.round(n); }
+function markPlayedToday(){
+  const key = dateKey();
+  State.profile.calendar[key] = true;
+  const last = State.profile.lastDailyDate;
+  if(last !== key){
+    if(last && daysBetween(last,key)===1) State.profile.dailyStreak += 1;
+    else if(last !== key) State.profile.dailyStreak = State.profile.dailyStreak||1;
+    if(!last) State.profile.dailyStreak = 1;
+    State.profile.lastDailyDate = key;
+  }
+}
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 2: ACHIEVEMENTS (100+)
+========================================================= */
+function accuracyPct(p){ const t=p.totalCorrect+p.totalWrong; return t? Math.round(p.totalCorrect/t*100):0; }
+function avgReactionMs(p){ return p.reactionCount? Math.round(p.reactionSum/p.reactionCount) : null; }
+
+const ACHIEVEMENTS = [];
+function ach(id,name,desc,icon,check,progress){ ACHIEVEMENTS.push({id,name,desc,icon,check,progress}); }
+
+/* --- Narrative / milestone achievements --- */
+ach('first_win','First Win','Win your very first level.','🥇',p=>p.gamesWon>=1);
+ach('perfect_memory','Perfect Memory','Finish a round with zero mistakes.','🧠',p=>p.perfectRounds>=1);
+ach('perfect_x10','Flawless x10','Finish 10 rounds with zero mistakes.','💎',p=>p.perfectRounds>=10,p=>[p.perfectRounds,10]);
+ach('perfect_x50','Flawless Master','Finish 50 rounds with zero mistakes.','👑',p=>p.perfectRounds>=50,p=>[p.perfectRounds,50]);
+ach('fast_thinker','Fast Thinker','Answer 25 questions in under 1.5 seconds.','⚡',p=>p.fastAnswers>=25,p=>[p.fastAnswers,25]);
+ach('speed_demon','Speed Demon','Answer 150 questions in under 1.5 seconds.','🚀',p=>p.fastAnswers>=150,p=>[p.fastAnswers,150]);
+ach('correct_100','100 Correct','Answer 100 questions correctly.','✅',p=>p.totalCorrect>=100,p=>[p.totalCorrect,100]);
+ach('correct_500','500 Correct','Answer 500 questions correctly.','✅',p=>p.totalCorrect>=500,p=>[p.totalCorrect,500]);
+ach('correct_1000','1000 Correct','Answer 1000 questions correctly.','🌟',p=>p.totalCorrect>=1000,p=>[p.totalCorrect,1000]);
+ach('correct_5000','Correctness Legend','Answer 5000 questions correctly.','🌠',p=>p.totalCorrect>=5000,p=>[p.totalCorrect,5000]);
+ach('combo_5','Combo Starter','Reach a combo of 5.','🔥',p=>p.highestCombo>=5,p=>[p.highestCombo,5]);
+ach('combo_10','Combo Master','Reach a combo of 10.','🔥',p=>p.highestCombo>=10,p=>[p.highestCombo,10]);
+ach('combo_20','Combo Legend','Reach a combo of 20.','🔥',p=>p.highestCombo>=20,p=>[p.highestCombo,20]);
+ach('combo_30','Combo God','Reach a combo of 30.','☄️',p=>p.highestCombo>=30,p=>[p.highestCombo,30]);
+ach('puzzle_king','Puzzle King','Win 20 puzzle-family games (Sudoku, Logic Grid, Maze, Connect Dots).','🧩',p=>{const g=p.perGame; return ['sudokuLite','logicGrid','mazeEscape','connectDots'].reduce((s,k)=>s+((g[k]&&g[k].won)||0),0)>=20;});
+ach('math_genius','Math Genius','Win 30 math-family games (Quick Math, Mental Arithmetic, Missing Number).','➗',p=>{const g=p.perGame; return ['quickMath','mentalArithmetic','missingNumber'].reduce((s,k)=>s+((g[k]&&g[k].won)||0),0)>=30;});
+ach('word_wizard','Word Wizard','Win 30 word-family games (Word Builder, Unscramble, Spelling, Vocabulary).','📚',p=>{const g=p.perGame; return ['wordBuilder','unscrambleWord','spellingChallenge','vocabularyQuiz'].reduce((s,k)=>s+((g[k]&&g[k].won)||0),0)>=30;});
+ach('logic_lord','Logic Lord','Win 25 logic-family games (Logic Grid, Coding Logic, Spot Pattern, IQ Quiz).','🕵️',p=>{const g=p.perGame; return ['logicGrid','codingLogicPuzzle','spotPattern','generalIQQuiz'].reduce((s,k)=>s+((g[k]&&g[k].won)||0),0)>=25;});
+ach('reflex_master','Reflex Master','Win 25 reflex-family games (Reflex Tap, Speed Click, Reaction Timer).','⚡',p=>{const g=p.perGame; return ['reflexTap','speedClick','reactionTimer'].reduce((s,k)=>s+((g[k]&&g[k].won)||0),0)>=25;});
+ach('brain_legend','Brain Legend','Reach the Brain Genius rank.','🧠',p=>currentRankTier()>=10);
+for(let i=1;i<=10;i++){
+  const lvl=i*10;
+  ach('level_'+lvl,'Level '+lvl,'Unlock level '+lvl+'.','🗺️',p=>p.unlockedLevels>=lvl,p=>[p.unlockedLevels,lvl]);
+}
+RANKS.forEach((rname,i)=>{
+  ach('rank_'+i,'Reach '+rname,'Achieve the '+rname+' rank.','🎖️',p=>currentRankTier()>=(i+1));
+});
+[3,7,14,30,60,100].forEach(n=>{
+  ach('dailystreak_'+n,'Daily Streak '+n,'Play '+n+' days in a row.','📅',p=>p.dailyStreak>=n,p=>[p.dailyStreak,n]);
+});
+[5,10,25,50].forEach(n=>{
+  ach('winstreak_'+n,'Winning Streak '+n,'Win '+n+' levels in a row without losing.','🏅',p=>p.streakBest>=n,p=>[p.streakBest,n]);
+});
+[1000,10000,50000,100000].forEach(n=>{
+  ach('coins_'+n,'Coin Collector '+fmtNum(n),'Accumulate '+fmtNum(n)+' total coins earned.','🪙',p=>p.coinsEarnedTotal>=n,p=>[p.coinsEarnedTotal,n]);
+});
+[1000,5000,20000,50000].forEach(n=>{
+  ach('xp_'+n,'XP Milestone '+fmtNum(n),'Earn '+fmtNum(n)+' total experience.','✨',p=>p.xp>=n,p=>[p.xp,n]);
+});
+[80,90,95,100].forEach(n=>{
+  ach('accuracy_'+n,'Accuracy '+n+'%','Reach '+n+'% overall accuracy (min 50 answers).','🎯',p=>(p.totalCorrect+p.totalWrong)>=50 && accuracyPct(p)>=n);
+});
+ach('games_100','Centurion','Play 100 games total.','🎮',p=>p.gamesPlayed>=100,p=>[p.gamesPlayed,100]);
+ach('games_500','Dedicated Trainer','Play 500 games total.','🎮',p=>p.gamesPlayed>=500,p=>[p.gamesPlayed,500]);
+ach('games_1000','Brain Marathoner','Play 1000 games total.','🏃',p=>p.gamesPlayed>=1000,p=>[p.gamesPlayed,1000]);
+ach('night_owl','Night Owl','Switch to Dark Mode.','🌙',p=>State.settings.theme==='dark');
+ach('early_bird','Early Bird','Switch to Light Mode.','🌤️',p=>State.settings.theme==='light');
+ach('completionist','Completionist','Unlock all 100 levels.','🏆',p=>p.unlockedLevels>=100);
+ach('three_star_10','Rising Star','Earn 3 stars on 10 different levels.','⭐',p=>Object.values(p.levelStars).filter(s=>s>=3).length>=10,p=>[Object.values(p.levelStars).filter(s=>s>=3).length,10]);
+ach('three_star_50','Star Collector','Earn 3 stars on 50 different levels.','🌟',p=>Object.values(p.levelStars).filter(s=>s>=3).length>=50,p=>[Object.values(p.levelStars).filter(s=>s>=3).length,50]);
+ach('three_star_100','Perfectionist','Earn 3 stars on all 100 levels.','💫',p=>Object.values(p.levelStars).filter(s=>s>=3).length>=100,p=>[Object.values(p.levelStars).filter(s=>s>=3).length,100]);
+ach('daily_first','Daily Devotee','Complete your first Daily Challenge.','📆',p=>!!p.lastDailyBonusDate);
+ach('spin_5','Lucky Spinner','Use the Lucky Spin 5 times.','🎡',p=>p.spinsUsed>=5,p=>[p.spinsUsed,5]);
+ach('mystery_5','Box Opener','Open 5 Mystery Boxes.','🎁',p=>p.mysteryBoxesOpened>=5,p=>[p.mysteryBoxesOpened,5]);
+ach('chest_5','Treasure Hunter','Open 5 Reward Chests.','🗝️',p=>p.chestsOpened>=5,p=>[p.chestsOpened,5]);
+ach('reaction_fast','Lightning Reflexes','Record a reaction time under 250ms.','⚡',p=>p.bestReactionMs!==null && p.bestReactionMs<250);
+ach('reaction_pro','Reflex Pro','Record a reaction time under 180ms.','🌩️',p=>p.bestReactionMs!==null && p.bestReactionMs<180);
+ach('achv_hunter_25','Achievement Hunter','Unlock 25 achievements.','🎖️',p=>p.achievements.length>=25,p=>[p.achievements.length,25]);
+ach('achv_hunter_50','Badge Collector','Unlock 50 achievements.','🎖️',p=>p.achievements.length>=50,p=>[p.achievements.length,50]);
+ach('achv_hunter_75','Trophy Cabinet','Unlock 75 achievements.','🏆',p=>p.achievements.length>=75,p=>[p.achievements.length,75]);
+ach('no_mistakes_run','Clean Sweep','Complete 5 rounds in a row with zero mistakes.','🧼',p=>p.cleanStreak>=5);
+ach('mood_7','Mood Tracker','Log your mood for 7 different days.','😊',p=>Object.keys(p.moodLog).length>=7,p=>[Object.keys(p.moodLog).length,7]);
+ach('weekly_1','Weekly Warrior','Complete a Weekly Challenge.','📈',p=>p.weeklyCompletedCount>=1);
+ach('monthly_1','Monthly Champion','Complete a Monthly Challenge.','🗓️',p=>p.monthlyCompletedCount>=1);
+
+/* --- Per game-type achievements (40 games) --- */
+GAME_KEYS.forEach(key=>{
+  const meta = GAME_META[key];
+  ach('play_'+key, meta.name+' Novice', 'Play '+meta.name+' 5 times.', meta.icon,
+    p=>{ const g=p.perGame[key]; return g && g.played>=5; }, p=>{const g=p.perGame[key]; return [g?g.played:0,5];});
+  ach('win_'+key, meta.name+' Champion', 'Win '+meta.name+' 15 times.', meta.icon,
+    p=>{ const g=p.perGame[key]; return g && g.won>=15; }, p=>{const g=p.perGame[key]; return [g?g.won:0,15];});
+});
+
+function achievementById(id){ return ACHIEVEMENTS.find(a=>a.id===id); }
+function checkAchievements(){
+  const unlocked = [];
+  for(const a of ACHIEVEMENTS){
+    if(State.profile.achievements.includes(a.id)) continue;
+    let ok=false;
+    try{ ok = !!a.check(State.profile); }catch(e){ ok=false; }
+    if(ok){
+      State.profile.achievements.push(a.id);
+      unlocked.push(a);
+      addCoins(50); addXP(25);
+    }
+  }
+  if(unlocked.length) saveProfile();
+  return unlocked;
+}
+function queueAchievementPopups(list){
+  if(!list || !list.length) return;
+  let i=0;
+  function showNext(){
+    if(i>=list.length) return;
+    const a = list[i++];
+    Audio1.achievement();
+    Confetti.burst(80);
+    $('#achvModalIcon').textContent = a.icon;
+    $('#achvModalName').textContent = a.name;
+    $('#achvModalDesc').textContent = a.desc + '  (+50 coins, +25 XP)';
+    $('#achvModal').classList.add('active');
+    $('#achvModalClose').onclick = ()=>{ $('#achvModal').classList.remove('active'); setTimeout(showNext, 300); };
+  }
+  showNext();
+}
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 3: DAILY/WEEKLY/MONTHLY, SPIN,
+   MYSTERY BOX, REWARD CHEST, TIPS/QUOTES, CALENDAR, MOOD,
+   FOCUS METER, IQ & BRAIN AGE ESTIMATION
+========================================================= */
+
+const BRAIN_TIPS = [
+  "Short, frequent training sessions beat one long marathon session for memory retention.",
+  "Sleep consolidates memory — a good night's rest can boost recall by up to 20%.",
+  "Chunking information into groups of 3-4 makes it far easier to remember.",
+  "Physical exercise increases blood flow to the brain, improving focus within minutes.",
+  "Learning something new physically grows new neural connections at any age.",
+  "Deep breathing for 60 seconds before a task can measurably improve concentration.",
+  "Spaced repetition beats cramming — revisit topics after increasing intervals.",
+  "Visualizing information as a story or image improves recall dramatically.",
+  "Multitasking reduces accuracy — your brain switches, it doesn't truly parallelize.",
+  "Hydration matters: even mild dehydration can impair short-term memory.",
+  "Novelty boosts dopamine, which helps memories stick — try varying your routine.",
+  "Teaching a concept to someone else is one of the fastest ways to master it.",
+  "A brisk 10-minute walk can sharpen attention for up to two hours afterward.",
+  "Handwriting notes engages more of the brain than typing, aiding memory.",
+  "Background music without lyrics can help some people focus better on tasks.",
+  "Your brain uses about 20% of your body's energy despite being 2% of your weight.",
+  "Mental math practice strengthens the same circuits used in general reasoning.",
+  "Mistakes during practice actually help long-term learning — don't fear them.",
+  "Reducing screen time before bed improves the memory-consolidation benefits of sleep.",
+  "Curiosity primes the brain to absorb and retain new information more easily.",
+  "Playing memory games regularly can improve working memory capacity over weeks.",
+  "Taking brief breaks (the Pomodoro technique) can prevent mental fatigue.",
+  "Gratitude journaling has been linked to improved focus and mood regulation.",
+  "Cross-training your brain with varied puzzle types builds broader cognitive flexibility.",
+  "Reaction time peaks in your twenties but stays trainable throughout life.",
+  "Reading fiction can improve theory-of-mind and social reasoning skills.",
+  "Green spaces and natural light have measurable positive effects on attention.",
+  "A consistent sleep schedule improves next-day reaction time more than total hours alone.",
+  "Caffeine can improve alertness, but too much can hurt accuracy on tricky tasks.",
+  "Struggling with a hard problem before checking the answer improves retention."
+];
+const DAILY_QUOTES = [
+  "The brain is a muscle — the more you train it, the stronger it gets.",
+  "Small daily improvements are the key to staggering long-term results.",
+  "Discipline is choosing between what you want now and what you want most.",
+  "Every expert was once a beginner who refused to give up.",
+  "Focus on progress, not perfection.",
+  "The mind that opens to a new idea never returns to its original size.",
+  "Consistency beats intensity — show up every day.",
+  "Your only limit is the one you set in your mind.",
+  "Great things are done by a series of small things brought together.",
+  "Challenges are what make life interesting; overcoming them is what makes it meaningful.",
+  "A little progress each day adds up to big results.",
+  "Train your brain like an athlete trains their body — daily and deliberately.",
+  "Curiosity is the engine of achievement.",
+  "The expert in anything was once a beginner.",
+  "Sharpen your mind daily; it's the only tool you carry everywhere.",
+  "Success is the sum of small efforts repeated day in and day out.",
+  "Push yourself, because no one else is going to do it for you.",
+  "It always seems impossible until it's done.",
+  "Believe you can and you're halfway there.",
+  "Learning never exhausts the mind — it only sharpens it.",
+  "Patience and persistence sharpen the sharpest of minds.",
+  "Don't watch the clock; do what it does — keep going.",
+  "The only way to learn is through practice.",
+  "You don't have to be great to start, but you have to start to be great.",
+  "Growth begins at the edge of your comfort zone.",
+  "A sharp mind today is a stronger mind tomorrow.",
+  "Every round you play makes your brain a little quicker.",
+  "Progress, however small, is still progress.",
+  "The best investment you can make is in your own mind.",
+  "Champions keep playing until they get it right."
+];
+function dayIndexSeed(){ const d=new Date(); return Math.floor(d.getTime()/86400000); }
+function brainTipOfDay(){ return BRAIN_TIPS[dayIndexSeed()%BRAIN_TIPS.length]; }
+function quoteOfDay(){ return DAILY_QUOTES[(dayIndexSeed()+7)%DAILY_QUOTES.length]; }
+
+/* ---- Daily Challenge ---- */
+function dailyChallengeForToday(){
+  const key = dateKey();
+  const rnd = mulberry32(seedFromString('daily-'+key));
+  const gameKey = GAME_KEYS[Math.floor(rnd()*GAME_KEYS.length)];
+  const tier = clamp(1+Math.floor(rnd()*Math.max(1,currentRankTier()+1)),1,10);
+  return { dateKey:key, gameKey, tier, posInTier:5, level:'daily', isDaily:true, rewardMultiplier:2 };
+}
+function dailyAlreadyClaimedToday(){ return State.profile.lastDailyBonusDate === dateKey(); }
+
+/* ---- Weekly / Monthly challenges ---- */
+function getWeekKey(d){
+  d = d || new Date();
+  const onejan = new Date(d.getFullYear(),0,1);
+  const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay()+1)/7);
+  return d.getFullYear()+'-W'+week;
+}
+function getMonthKey(d){ d=d||new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1); }
+function weeklyTarget(){ return 8 + currentRankTier()*2; }
+function monthlyTarget(){ return 3000 + currentRankTier()*300; }
+function ensureWeeklyMonthly(){
+  const wk = getWeekKey();
+  if(State.profile.weeklyKey !== wk){ State.profile.weeklyKey = wk; State.profile.weeklyProgress = 0; State.profile.weeklyRewardGiven=false; }
+  const mk = getMonthKey();
+  if(State.profile.monthlyKey !== mk){ State.profile.monthlyKey = mk; State.profile.monthlyProgress = 0; State.profile.monthlyRewardGiven=false; }
+}
+function registerSessionForChallenges(won, bpEarned){
+  ensureWeeklyMonthly();
+  if(won) State.profile.weeklyProgress++;
+  State.profile.monthlyProgress += Math.max(0, bpEarned);
+  if(!State.profile.weeklyRewardGiven && State.profile.weeklyProgress>=weeklyTarget()){
+    State.profile.weeklyRewardGiven = true; State.profile.weeklyCompletedCount++;
+    addCoins(300); addXP(150); showToast('Weekly Challenge complete! +300 coins, +150 XP','📈');
+  }
+  if(!State.profile.monthlyRewardGiven && State.profile.monthlyProgress>=monthlyTarget()){
+    State.profile.monthlyRewardGiven = true; State.profile.monthlyCompletedCount++;
+    addCoins(1000); addXP(500); showToast('Monthly Challenge complete! +1000 coins, +500 XP','🗓️');
+  }
+}
+
+/* ---- Lucky Spin ---- */
+const SPIN_REWARDS = [
+  {label:'+50 Coins', type:'coins', val:50, weight:26},
+  {label:'+120 Coins', type:'coins', val:120, weight:20},
+  {label:'+300 Coins', type:'coins', val:300, weight:10},
+  {label:'+80 XP', type:'xp', val:80, weight:18},
+  {label:'+180 XP', type:'xp', val:180, weight:10},
+  {label:'Mystery Box', type:'mystery', val:1, weight:12},
+  {label:'JACKPOT +1500 Coins', type:'coins', val:1500, weight:4}
+];
+function weightedPick(list){
+  const total = list.reduce((s,i)=>s+i.weight,0);
+  let r = Math.random()*total;
+  for(const item of list){ if((r-=item.weight)<=0) return item; }
+  return list[list.length-1];
+}
+function canSpinToday(){ return State.profile.lastSpinDate !== dateKey(); }
+function doLuckySpin(){
+  if(!canSpinToday()) return null;
+  State.profile.lastSpinDate = dateKey();
+  State.profile.spinsUsed++;
+  const reward = weightedPick(SPIN_REWARDS);
+  applyReward(reward);
+  saveProfile();
+  return reward;
+}
+function applyReward(reward){
+  if(reward.type==='coins') addCoins(reward.val);
+  else if(reward.type==='xp') addXP(reward.val);
+  else if(reward.type==='mystery') { /* handled by opening a mystery box immediately */ }
+}
+
+/* ---- Mystery Box ---- */
+const MYSTERY_REWARDS = [
+  {label:'+100 Coins', type:'coins', val:100, weight:30},
+  {label:'+250 Coins', type:'coins', val:250, weight:18},
+  {label:'+150 XP', type:'xp', val:150, weight:22},
+  {label:'+500 Coins', type:'coins', val:500, weight:8},
+  {label:'+300 XP', type:'xp', val:300, weight:8},
+  {label:'MEGA +1000 Coins', type:'coins', val:1000, weight:4}
+];
+function canOpenMysteryToday(){ return State.profile.lastMysteryDate !== dateKey(); }
+function openMysteryBox(){
+  const reward = weightedPick(MYSTERY_REWARDS);
+  applyReward(reward);
+  State.profile.mysteryBoxesOpened++;
+  State.profile.lastMysteryDate = dateKey();
+  saveProfile();
+  return reward;
+}
+
+/* ---- Reward Chest (tier milestones) ---- */
+function chestAvailable(){ return currentRankTier() > State.profile.chestClaimedTier; }
+function openRewardChest(){
+  if(!chestAvailable()) return null;
+  const tier = currentRankTier();
+  const coinsWon = 200*tier, xpWon = 100*tier;
+  addCoins(coinsWon); addXP(xpWon);
+  State.profile.chestClaimedTier = tier;
+  State.profile.chestsOpened++;
+  saveProfile();
+  return {coins:coinsWon, xp:xpWon, tier};
+}
+
+/* ---- Mood tracker ---- */
+const MOODS = ['😄','🙂','😐','😔','😫'];
+function logMood(mood){ State.profile.moodLog[dateKey()] = mood; saveProfile(); }
+function todayMood(){ return State.profile.moodLog[dateKey()] || null; }
+
+/* ---- Focus meter / IQ estimation / Brain age estimation (fun, non-clinical) ---- */
+function computeFocusMeter(){
+  const p = State.profile;
+  const acc = accuracyPct(p);
+  const comboFactor = clamp(p.highestCombo/25,0,1)*100;
+  const streakFactor = clamp(p.dailyStreak/14,0,1)*100;
+  const val = Math.round(clamp(acc*0.5 + comboFactor*0.25 + streakFactor*0.25, 5, 99));
+  return val;
+}
+function computeIQEstimate(){
+  const p = State.profile;
+  const acc = accuracyPct(p);
+  const rt = avgReactionMs(p);
+  let iq = 100 + (acc-70)*0.5 + (p.unlockedLevels/100)*18;
+  if(rt) iq += clamp((900-rt)/25, -12, 12);
+  return Math.round(clamp(iq, 75, 155));
+}
+function computeBrainAge(){
+  const p = State.profile;
+  const acc = accuracyPct(p);
+  const rt = avgReactionMs(p) || 900;
+  let age = 45 - (acc-60)*0.35 - (p.unlockedLevels/100)*14 - (700-rt)/40;
+  return Math.round(clamp(age, 14, 78));
+}
+function calendarLast35Days(){
+  const days=[]; const today=new Date();
+  for(let i=34;i>=0;i--){
+    const d=new Date(today); d.setDate(d.getDate()-i);
+    days.push({key:dateKey(d), label:d.getDate(), played: !!State.profile.calendar[dateKey(d)], isToday: i===0});
+  }
+  return days;
+}
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 4: SCREEN RENDERERS
+========================================================= */
+
+/* ---- HOME ---- */
+function renderHome(){
+  const hasName = !!State.profile.name;
+  $('#nameEntryCard').style.display = hasName ? 'none' : 'flex';
+  $('#playerChip').style.display = hasName ? 'flex' : 'none';
+  if(hasName){
+    $('#playerNameDisp').textContent = State.profile.name;
+    $('#playerRankDisp').textContent = currentRankName()+' · Level '+State.profile.unlockedLevels;
+    $('#playerCoinsDisp').textContent = fmtNum(State.profile.coins);
+    $('#playerAvatar').textContent = State.profile.name.trim().charAt(0).toUpperCase() || '🙂';
+  }
+  const hud = $('#homeHudBar');
+  hud.innerHTML = '';
+  const pills = [
+    ['🪙', fmtNum(State.profile.coins), 'linear-gradient(135deg,#ffd166,#ff9a5c)'],
+    ['✨', fmtNum(State.profile.xp), 'linear-gradient(135deg,#7c5cff,#00d4ff)'],
+    ['🌟', fmtNum(Object.values(State.profile.levelStars).reduce((a,b)=>a+b,0)), 'linear-gradient(135deg,#37ffb0,#00d4ff)'],
+    ['🏆', fmtNum(State.profile.highestScore), 'linear-gradient(135deg,#ff5ca8,#7c5cff)']
+  ];
+  pills.forEach(([icon,val,bg])=>{
+    const p = el('div','hud-pill', `<span class="hi">${icon}</span><span>${val}</span>`);
+    p.style.background = bg; p.style.color = '#fff';
+    hud.appendChild(p);
+  });
+  $('#brainTipText').textContent = brainTipOfDay();
+}
+$('#nameInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('#saveNameBtn').click(); });
+$('#saveNameBtn').addEventListener('click', ()=>{
+  const v = $('#nameInput').value.trim();
+  if(!v){ $('#nameInput').focus(); return; }
+  State.profile.name = v.slice(0,18);
+  saveProfile();
+  Audio1.go(); Audio1.startMusic();
+  renderHome();
+  checkAndPopAchievements();
+});
+$('#newGameBtn').addEventListener('click', ()=>{
+  confirmDialog('Start New Game?', 'This resets your levels, stars, coins, XP and streaks. Your name and settings are kept.', ()=>{
+    const name = State.profile.name;
+    State.profile = defaultProfile();
+    State.profile.name = name;
+    saveProfile();
+    showToast('Fresh start! Good luck.','✨');
+    showScreen('levelSelectScreen');
+  });
+});
+
+/* ---- LEVEL SELECT ---- */
+function renderLevelSelect(){
+  const container = $('#tiersContainer');
+  container.innerHTML = '';
+  $('#levelSelectProgress').textContent = State.profile.unlockedLevels+'/100';
+  for(let tier=1; tier<=10; tier++){
+    const block = el('div','tier-block');
+    const games = gamesForTier(tier).map(k=>GAME_META[k].name).join(' · ');
+    block.appendChild(el('div','tier-head glass-strong',
+      `<div class="th-badge">${tier}</div><div><h3>${rankNameForTier(tier)}</h3><span>${games}</span></div>`));
+    const grid = el('div','level-grid');
+    for(let i=1;i<=10;i++){
+      const lv = (tier-1)*10+i;
+      const unlocked = lv <= State.profile.unlockedLevels;
+      const isCurrent = lv === State.profile.unlockedLevels;
+      const stars = State.profile.levelStars[lv]||0;
+      const node = el('div','level-node glass'+(unlocked?'':' locked')+(isCurrent?' current':''));
+      node.innerHTML = unlocked
+        ? `<div>${lv}</div><div class="lstars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>`
+        : `<div class="llock">🔒</div><div style="font-size:0.6rem;">${lv}</div>`;
+      if(unlocked){
+        node.addEventListener('click', ()=>{ Audio1.click(); Engine.startLevel(lv); });
+      }
+      grid.appendChild(node);
+    }
+    block.appendChild(grid);
+    container.appendChild(block);
+  }
+}
+
+/* ---- STATISTICS ---- */
+function statCard(label, value){ return `<div class="glass result-stat-card"><div class="rv">${value}</div><div class="rl">${label}</div></div>`; }
+function renderStats(){
+  const p = State.profile;
+  const c = $('#statsContainer');
+  const acc = accuracyPct(p);
+  const rt = avgReactionMs(p);
+  c.innerHTML = `
+    <div class="result-stats" style="max-width:none;">
+      ${statCard('Games Played', fmtNum(p.gamesPlayed))}
+      ${statCard('Games Won', fmtNum(p.gamesWon))}
+      ${statCard('Games Lost', fmtNum(p.gamesLost))}
+      ${statCard('Accuracy', acc+'%')}
+      ${statCard('Fastest Reaction', p.bestReactionMs? p.bestReactionMs+' ms':'--')}
+      ${statCard('Avg Reaction', rt? rt+' ms':'--')}
+      ${statCard('Highest Combo', p.highestCombo)}
+      ${statCard('Highest Score', fmtNum(p.highestScore))}
+      ${statCard('Longest Win Streak', p.streakBest)}
+      ${statCard('Daily Streak', p.dailyStreak+' days')}
+      ${statCard('Current Rank', currentRankName())}
+      ${statCard('Levels Unlocked', p.unlockedLevels+'/100')}
+    </div>
+    <div class="section-title">🧬 Brain Estimates <span style="font-weight:400; font-size:0.7rem; color:var(--text-2);">(just for fun, not clinical)</span></div>
+    <div class="glass" style="padding:18px; display:flex; flex-direction:column; gap:14px;">
+      <div>
+        <div class="flex-row"><span>🧠 Estimated IQ</span><span class="spacer"></span><b>${computeIQEstimate()}</b></div>
+        <div class="meter" style="margin-top:6px;"><i style="width:${clamp((computeIQEstimate()-70)/90*100,4,100)}%; background:linear-gradient(90deg,var(--accent-1),var(--accent-2));"></i></div>
+      </div>
+      <div>
+        <div class="flex-row"><span>🎂 Brain Age</span><span class="spacer"></span><b>${computeBrainAge()} yrs</b></div>
+        <div class="meter" style="margin-top:6px;"><i style="width:${clamp(100-((computeBrainAge()-14)/64*100),4,100)}%; background:linear-gradient(90deg,var(--accent-5),var(--accent-2));"></i></div>
+      </div>
+      <div>
+        <div class="flex-row"><span>🎯 Focus Meter</span><span class="spacer"></span><b>${computeFocusMeter()}%</b></div>
+        <div class="meter" style="margin-top:6px;"><i style="width:${computeFocusMeter()}%; background:linear-gradient(90deg,var(--accent-4),var(--accent-3));"></i></div>
+      </div>
+    </div>
+    <div class="section-title">📅 Progress Calendar (last 35 days)</div>
+    <div class="glass" style="padding:16px;"><div class="cal-grid" id="calGridStats"></div></div>
+    <div class="section-title">😊 Mood Log</div>
+    <div class="glass" style="padding:16px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;" id="moodRowStats"></div>
+  `;
+  const cg = $('#calGridStats');
+  calendarLast35Days().forEach(d=>{
+    cg.appendChild(el('div','cal-cell'+(d.played?' played':'')+(d.isToday?' today':''), d.label));
+  });
+  const mr = $('#moodRowStats');
+  MOODS.forEach(m=>{
+    const btn = el('button','btn small'+(todayMood()===m?' success':' ghost'), m);
+    btn.onclick = ()=>{ logMood(m); Audio1.click(); renderStats(); };
+    mr.appendChild(btn);
+  });
+}
+
+/* ---- SETTINGS ---- */
+function settingRow(label, sub, on, onToggle){
+  const row = el('div','setting-row glass-strong');
+  row.innerHTML = `<div><div class="sr-label">${label}</div><div class="sr-sub">${sub}</div></div>`;
+  const sw = el('div','switch'+(on?' on':''));
+  sw.appendChild(el('div','knob'));
+  sw.onclick = ()=>{ onToggle(); };
+  row.appendChild(sw);
+  return row;
+}
+function renderSettings(){
+  const c = $('#settingsContainer');
+  c.innerHTML='';
+  c.appendChild(el('div','section-title','Appearance'));
+  const themeRow = settingRow('Dark Mode', 'Switch between dark and light themes', State.settings.theme==='dark', ()=>{
+    State.settings.theme = State.settings.theme==='dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', State.settings.theme);
+    saveSettings(); checkAndPopAchievements(); renderSettings();
+  });
+  c.appendChild(themeRow);
+  c.appendChild(settingRow('Animations', 'Particle background, confetti and transitions', State.settings.animations, ()=>{
+    State.settings.animations = !State.settings.animations;
+    document.body.classList.toggle('no-anim', !State.settings.animations);
+    saveSettings(); renderSettings();
+  }));
+  c.appendChild(el('div','section-title','Audio'));
+  c.appendChild(settingRow('Sound Effects', 'Clicks, correct/wrong tones, level up chimes', State.settings.sound, ()=>{
+    State.settings.sound = !State.settings.sound; saveSettings(); renderSettings();
+  }));
+  c.appendChild(settingRow('Music', 'Ambient background music loop', State.settings.music, ()=>{
+    State.settings.music = !State.settings.music;
+    State.settings.music ? Audio1.startMusic() : Audio1.stopMusic();
+    saveSettings(); renderSettings();
+  }));
+  c.appendChild(el('div','section-title','Profile'));
+  const nameCard = el('div','glass', '');
+  nameCard.style.padding='18px'; nameCard.style.display='flex'; nameCard.style.flexDirection='column'; nameCard.style.gap='10px';
+  nameCard.innerHTML = `<div class="sr-label">Change Name</div>
+    <input type="text" id="settingsNameInput" maxlength="18" value="${State.profile.name}" style="padding:12px 14px; border-radius:12px; border:1px solid var(--glass-bd); background:rgba(0,0,0,0.15); color:var(--text-1);">
+    <button class="btn small" id="settingsSaveNameBtn">Save Name</button>`;
+  c.appendChild(nameCard);
+  $('#settingsSaveNameBtn').onclick = ()=>{
+    const v = $('#settingsNameInput').value.trim();
+    if(v){ State.profile.name = v.slice(0,18); saveProfile(); showToast('Name updated','✅'); }
+  };
+  c.appendChild(el('div','section-title','Danger Zone'));
+  const dz = el('div','glass'); dz.style.padding='18px'; dz.style.display='flex'; dz.style.flexDirection='column'; dz.style.gap='12px';
+  dz.appendChild(el('div','muted','These actions cannot be undone.'));
+  const resetStatsBtn = el('button','btn danger block','Reset Statistics');
+  resetStatsBtn.onclick = ()=>confirmDialog('Reset Statistics?','This clears games played/won, accuracy, combo and reaction history — levels and coins are kept.', ()=>{
+    const p = State.profile;
+    Object.assign(p, { gamesPlayed:0, gamesWon:0, gamesLost:0, totalCorrect:0, totalWrong:0, bestReactionMs:null, reactionSum:0, reactionCount:0, highestCombo:0, perGame:{}, perfectRounds:0, fastAnswers:0, cleanStreak:0 });
+    saveProfile(); showToast('Statistics reset','🧹'); renderSettings();
+  });
+  const resetProgressBtn = el('button','btn danger block','Reset Progress');
+  resetProgressBtn.onclick = ()=>confirmDialog('Reset All Progress?','This wipes levels, coins, XP, achievements and stats. Your name is kept.', ()=>{
+    const name = State.profile.name;
+    State.profile = defaultProfile();
+    State.profile.name = name;
+    saveProfile(); showToast('Progress reset','🧹'); renderSettings();
+  });
+  dz.appendChild(resetStatsBtn); dz.appendChild(resetProgressBtn);
+  c.appendChild(dz);
+}
+
+/* ---- ACHIEVEMENTS ---- */
+function renderAchievements(){
+  const c = $('#achvContainer');
+  const unlockedIds = new Set(State.profile.achievements);
+  $('#achvCountBadge').textContent = unlockedIds.size+'/'+ACHIEVEMENTS.length;
+  const grid = el('div','grid grid-auto');
+  ACHIEVEMENTS.forEach(a=>{
+    const unlocked = unlockedIds.has(a.id);
+    const card = el('div','glass achv-card'+(unlocked?'':' locked'));
+    let progHtml = '';
+    if(!unlocked && a.progress){
+      try{
+        const [cur,max] = a.progress(State.profile);
+        progHtml = `<div class="achv-progress"><i style="width:${clamp((cur||0)/max*100,0,100)}%;"></i></div>`;
+      }catch(e){}
+    }
+    card.innerHTML = `<div class="ai">${unlocked? a.icon : '🔒'}</div><div style="flex:1;"><div class="at">${a.name}</div><div class="ad">${a.desc}</div>${progHtml}</div>`;
+    grid.appendChild(card);
+  });
+  c.innerHTML=''; c.appendChild(grid);
+}
+
+/* ---- LEADERBOARD ---- */
+function renderLeaderboard(){
+  const c = $('#leaderboardContainer');
+  const board = loadBoard();
+  c.innerHTML = '';
+  c.appendChild(el('div','glass', `<div style="padding:16px;"><b>${State.profile.name||'You'}</b> · Highest Score: <b>${fmtNum(State.profile.highestScore)}</b></div>`));
+  c.appendChild(el('div','section-title','Top Local Runs'));
+  if(!board.length){
+    c.appendChild(el('div','glass center muted', '<div style="padding:24px;">No runs yet — play a level to appear on the board!</div>'));
+    return;
+  }
+  const list = el('div','glass');
+  list.style.padding='6px 0';
+  board.slice().sort((a,b)=>b.score-a.score).slice(0,20).forEach((r,i)=>{
+    const row = el('div','flex-row', `<div style="width:30px; font-weight:800;">#${i+1}</div><div style="flex:1;"><div style="font-weight:700;">${GAME_META[r.game]?GAME_META[r.game].name:r.game}</div><div class="muted" style="font-size:0.75rem;">Level ${r.level} · ${r.date}</div></div><div style="font-weight:800; color:var(--accent-2);">${fmtNum(r.score)}</div>`);
+    row.style.padding='12px 18px'; row.style.borderBottom = i<19?'1px solid var(--glass-bd)':'none';
+    list.appendChild(row);
+  });
+  c.appendChild(list);
+}
+function recordBoardEntry(entry){
+  const board = loadBoard();
+  board.push(entry);
+  saveBoard(board);
+}
+
+/* ---- INSTRUCTIONS ---- */
+function renderInstructions(){
+  const c = $('#instructionsContainer');
+  const gamesListHtml = GAME_KEYS.map(k=>`<div class="glass" style="padding:12px 16px; display:flex; gap:10px; align-items:center;"><span style="font-size:1.3rem;">${GAME_META[k].icon}</span><div><b>${GAME_META[k].name}</b><div class="muted" style="font-size:0.78rem;">${GAME_META[k].desc}</div></div></div>`).join('');
+  c.innerHTML = `
+    <div class="glass" style="padding:20px; margin-bottom:16px;">
+      <h3 style="margin-top:0;">🎮 How BrainSpark Works</h3>
+      <p>Progress through <b>100 levels</b> across <b>10 ranks</b>. Every 10 levels unlocks a new rank and a fresh set of mini-games. Each level presents one of 40 brain-training challenges with a countdown, timer, lives, combo multiplier and score.</p>
+      <p><b>Scoring:</b> Correct answers award <b>+100 Brain Points</b> (scaled by your combo multiplier), wrong answers cost <b>-20</b>. Fast answers earn a speed bonus, and finishing a round with zero mistakes grants a Perfect Round bonus of extra coins.</p>
+      <p><b>Hints &amp; Skips:</b> Each level gives you a limited number of hints (💡) and one skip (⏭️). Use them wisely — hints cost a small score penalty.</p>
+      <p><b>Lives:</b> Reflex and reaction based games use lives (❤️) — run out and the round ends early.</p>
+      <p><b>Stars:</b> Clear a level to earn 1-3 stars based on your score and accuracy. Reach 3 stars everywhere for the Perfectionist achievement.</p>
+      <p><b>Daily Challenge:</b> A brand new challenge every day with 2x rewards. Keep your daily streak alive for bonus achievements.</p>
+      <p><b>Progress:</b> Your name, levels, coins, XP, achievements, statistics and settings all save automatically to this device.</p>
+    </div>
+    <div class="section-title">🧩 All 40 Mini-Games</div>
+    <div class="grid grid-auto">${gamesListHtml}</div>
+  `;
+}
+
+/* ---- DAILY HUB (daily/weekly/monthly/spin/box/chest/mood/quote) ---- */
+function renderDaily(){
+  const c = $('#dailyContainer');
+  const dc = dailyChallengeForToday();
+  ensureWeeklyMonthly();
+  const claimedToday = dailyAlreadyClaimedToday();
+  c.innerHTML = `
+    <div class="glass" style="padding:20px; text-align:center;">
+      <div style="font-size:0.72rem; letter-spacing:2px; text-transform:uppercase; color:var(--text-2);">Today's Challenge</div>
+      <div style="font-size:2.4rem; margin:8px 0;">${GAME_META[dc.gameKey].icon}</div>
+      <div style="font-weight:800; font-size:1.2rem;">${GAME_META[dc.gameKey].name}</div>
+      <div class="muted" style="font-size:0.85rem; margin:4px 0 14px;">${GAME_META[dc.gameKey].desc}</div>
+      <div class="badge" style="margin-bottom:14px;">🎁 2x Coins &amp; XP ${claimedToday?'· Bonus claimed today':''}</div>
+      <button class="btn block" id="playDailyBtn">▶️ Play Daily Challenge</button>
+    </div>
+
+    <div class="section-title">📈 Weekly Challenge</div>
+    <div class="glass" style="padding:18px;">
+      <div class="flex-row"><span>Win ${weeklyTarget()} levels this week</span><span class="spacer"></span><b>${State.profile.weeklyProgress}/${weeklyTarget()}</b></div>
+      <div class="meter" style="margin-top:8px;"><i style="width:${clamp(State.profile.weeklyProgress/weeklyTarget()*100,0,100)}%; background:linear-gradient(90deg,var(--accent-1),var(--accent-2));"></i></div>
+    </div>
+
+    <div class="section-title">🗓️ Monthly Challenge</div>
+    <div class="glass" style="padding:18px;">
+      <div class="flex-row"><span>Earn ${fmtNum(monthlyTarget())} Brain Points this month</span><span class="spacer"></span><b>${fmtNum(State.profile.monthlyProgress)}/${fmtNum(monthlyTarget())}</b></div>
+      <div class="meter" style="margin-top:8px;"><i style="width:${clamp(State.profile.monthlyProgress/monthlyTarget()*100,0,100)}%; background:linear-gradient(90deg,var(--accent-5),var(--accent-2));"></i></div>
+    </div>
+
+    <div class="grid grid-3" style="margin-top:22px;">
+      <div class="glass menu-btn" id="spinCard"><div class="mi">🎡</div><div class="mt">Lucky Spin</div><div class="mb">${canSpinToday()?'Available now':'Come back tomorrow'}</div></div>
+      <div class="glass menu-btn" id="boxCard"><div class="mi">🎁</div><div class="mt">Mystery Box</div><div class="mb">${canOpenMysteryToday()?'Available now':'Come back tomorrow'}</div></div>
+      <div class="glass menu-btn" id="chestCard"><div class="mi">🗝️</div><div class="mt">Reward Chest</div><div class="mb">${chestAvailable()?'Ready to open!':'Rank up to unlock'}</div></div>
+    </div>
+
+    <div class="section-title">💬 Quote of the Day</div>
+    <div class="glass center" style="padding:18px; font-style:italic;">"${quoteOfDay()}"</div>
+
+    <div class="section-title">😊 How are you feeling today?</div>
+    <div class="glass" style="padding:16px; display:flex; gap:10px; justify-content:center;" id="moodRowDaily"></div>
+  `;
+  $('#playDailyBtn').onclick = ()=>{ Audio1.click(); Engine.startDaily(dc); };
+  $('#spinCard').onclick = ()=>{ if(canSpinToday()) openSpinModal(); else showToast('Come back tomorrow for another spin!','⏳'); };
+  $('#boxCard').onclick = ()=>{ if(canOpenMysteryToday()) openMysteryModal(); else showToast('Come back tomorrow for another box!','⏳'); };
+  $('#chestCard').onclick = ()=>{ if(chestAvailable()) openChestModal(); else showToast('Reach a new rank to unlock a chest.','🔒'); };
+  const mr = $('#moodRowDaily');
+  MOODS.forEach(m=>{
+    const btn = el('button','btn small'+(todayMood()===m?' success':' ghost'), m);
+    btn.onclick = ()=>{ logMood(m); Audio1.click(); checkAndPopAchievements(); renderDaily(); };
+    mr.appendChild(btn);
+  });
+}
+
+function checkAndPopAchievements(){ queueAchievementPopups(checkAchievements()); }
+
+/* ---- Bonus modals: spin / mystery / chest ---- */
+function openSpinModal(){
+  const box = $('#bonusModalBox');
+  box.innerHTML = `<div style="font-size:3rem;">🎡</div><h2>Lucky Spin</h2><div id="spinResultText" class="muted" style="margin:10px 0 18px;">Spinning...</div><button class="btn block" id="bonusCloseBtn" disabled>Spinning...</button>`;
+  $('#bonusModal').classList.add('active');
+  Audio1.click();
+  setTimeout(()=>{
+    const reward = doLuckySpin();
+    let text = reward.label;
+    if(reward.type==='mystery'){ const mr = openMysteryBox(); text += ' → ' + mr.label; }
+    $('#spinResultText').textContent = 'You won: '+text+'!';
+    const closeBtn = $('#bonusCloseBtn'); closeBtn.disabled=false; closeBtn.textContent='Awesome!';
+    Audio1.levelup(); Confetti.burst(70);
+    closeBtn.onclick = ()=>{ $('#bonusModal').classList.remove('active'); checkAndPopAchievements(); renderDaily(); renderHome(); saveProfile(); };
+  }, 1200);
+}
+function openMysteryModal(){
+  const box = $('#bonusModalBox');
+  box.innerHTML = `<div style="font-size:3rem;">🎁</div><h2>Mystery Box</h2><div id="mbResultText" class="muted" style="margin:10px 0 18px;">Opening...</div><button class="btn block" id="bonusCloseBtn" disabled>Opening...</button>`;
+  $('#bonusModal').classList.add('active');
+  Audio1.click();
+  setTimeout(()=>{
+    const reward = openMysteryBox();
+    $('#mbResultText').textContent = 'You found: '+reward.label+'!';
+    const closeBtn = $('#bonusCloseBtn'); closeBtn.disabled=false; closeBtn.textContent='Nice!';
+    Audio1.levelup(); Confetti.burst(70);
+    closeBtn.onclick = ()=>{ $('#bonusModal').classList.remove('active'); checkAndPopAchievements(); renderDaily(); renderHome(); saveProfile(); };
+  }, 900);
+}
+function openChestModal(){
+  const box = $('#bonusModalBox');
+  const reward = openRewardChest();
+  if(!reward) return;
+  box.innerHTML = `<div style="font-size:3rem;">🗝️</div><h2>Reward Chest</h2><div class="muted" style="margin:10px 0 18px;">Rank ${reward.tier} chest opened!<br>+${fmtNum(reward.coins)} coins, +${fmtNum(reward.xp)} XP</div><button class="btn block" id="bonusCloseBtn">Great!</button>`;
+  $('#bonusModal').classList.add('active');
+  Audio1.levelup(); Confetti.burst(100);
+  $('#bonusCloseBtn').onclick = ()=>{ $('#bonusModal').classList.remove('active'); checkAndPopAchievements(); renderDaily(); renderHome(); saveProfile(); };
+}
+
+/* ---- Register renderers ---- */
+Object.assign(ScreenRenderers, {
+  homeScreen: renderHome,
+  levelSelectScreen: renderLevelSelect,
+  statsScreen: renderStats,
+  settingsScreen: renderSettings,
+  achvScreen: renderAchievements,
+  leaderboardScreen: renderLeaderboard,
+  instructionsScreen: renderInstructions,
+  dailyScreen: renderDaily
+});
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 5: GAME ENGINE CONTROLLER
+   (countdown / timer / pause / lives / combo / hints / skip / scoring)
+========================================================= */
+const GAMES = {}; // populated by each of the 40 game modules: GAMES[key] = { mount(container, diff, api){ return controller } }
+
+const Engine = (function(){
+  let session = null; // active run state
+  let controller = null; // active game module controller
+  let roundInterval = null;
+  let paused = false;
+
+  function hudSet(){
+    $('#hudScore').textContent = fmtNum(Math.max(0,session.score));
+    $('#hudLives').textContent = session.lives;
+    $('#hudCombo').textContent = 'x' + (1+Math.floor(session.combo/5)*0.5).toFixed(1).replace(/\.0$/,'');
+    $('#hudTimer').textContent = fmtTime(session.timeLeft);
+    $('#gameProgressBar').style.width = clamp(session.progress*100,0,100)+'%';
+  }
+
+  function buildMeta(levelOrDaily){
+    if(levelOrDaily && levelOrDaily.isDaily) return levelOrDaily;
+    const lv = levelOrDaily;
+    const d = difficultyForLevel(lv);
+    return { level: lv, gameKey: gameKeyForLevel(lv), tier: d.tier, posInTier: d.posInTier, factor: d.factor, isDaily:false };
+  }
+
+  function timeLimitFor(meta){ return clamp(75 - meta.tier*4, 24, 70); }
+
+  function startLevel(lv){ begin(buildMeta(lv)); }
+  function startDaily(dc){ begin(dc); }
+
+  function begin(meta){
+    State.currentLevel = meta;
+    session = {
+      meta, score:0, coins:0, combo:0, maxCombo:0,
+      correct:0, wrong:0, lives:3, hintsUsed:0, hintsMax:3, skipsUsed:0, skipsMax:1,
+      startTime: Date.now(), timeLeft: timeLimitFor(meta), progress:0, ended:false,
+      reactionTimes:[]
+    };
+    paused = false;
+    showScreen('gameScreen');
+    const gm = GAME_META[meta.gameKey];
+    $('#gameTitleText').textContent = gm.name + (meta.isDaily? ' · Daily Challenge' : ' · Level '+meta.level);
+    $('#gameSubText').textContent = gm.desc;
+    $('#hintBtn').disabled = false; $('#skipBtn').disabled = false;
+    hudSet();
+    mountGameWithCountdown();
+  }
+
+  function mountGameWithCountdown(){
+    const stage = $('#gameStage'); stage.innerHTML='';
+    const overlay = $('#countdownOverlay'); const numEl = $('#countdownNum');
+    overlay.classList.add('active');
+    let n = 3;
+    numEl.textContent = n;
+    Audio1.countdown();
+    const cdInterval = setInterval(()=>{
+      n--;
+      if(n>0){ numEl.textContent = n; Audio1.countdown(); }
+      else{
+        clearInterval(cdInterval);
+        numEl.textContent = 'GO!';
+        Audio1.go();
+        setTimeout(()=>{
+          overlay.classList.remove('active');
+          mountGame();
+        }, 350);
+      }
+    }, 700);
+  }
+
+  function mountGame(){
+    const stage = $('#gameStage');
+    stage.innerHTML = '';
+    const api = makeApi();
+    const diff = { tier:session.meta.tier, posInTier:session.meta.posInTier, factor: session.meta.factor||session.meta.tier, level: session.meta.level, isDaily: !!session.meta.isDaily,
+      rng: session.meta.isDaily ? mulberry32(seedFromString('daily-'+session.meta.dateKey+'-'+session.meta.gameKey)) : Math.random };
+    try{
+      controller = GAMES[session.meta.gameKey].mount(stage, diff, api);
+    }catch(e){
+      console.error('Game mount failed', session.meta.gameKey, e);
+      stage.innerHTML = '<div class="glass" style="padding:24px;">This game had a hiccup loading. Please try Skip or go back.</div>';
+      controller = { pause(){}, resume(){}, restart(){ mountGame(); }, hint(){return false;}, skip(){ finishRound(false); }, destroy(){} };
+    }
+    startRoundTimer();
+  }
+
+  function startRoundTimer(){
+    stopRoundTimer();
+    roundInterval = setInterval(()=>{
+      if(paused || !session || session.ended) return;
+      session.timeLeft -= 1;
+      if(session.timeLeft<=0){
+        session.timeLeft = 0; hudSet();
+        finishRound(session.correct>0 && session.wrong===0 ? true : session.score>0);
+        return;
+      }
+      hudSet();
+    },1000);
+  }
+  function stopRoundTimer(){ if(roundInterval){ clearInterval(roundInterval); roundInterval=null; } }
+
+  function makeApi(){
+    return {
+      correct(basePoints, reactionMs){
+        if(!session || session.ended) return;
+        basePoints = basePoints||100;
+        session.combo++; session.maxCombo = Math.max(session.maxCombo, session.combo);
+        const mult = 1 + Math.floor(session.combo/5)*0.5;
+        let pts = Math.round(basePoints*mult);
+        if(reactionMs!=null && reactionMs<1200){ pts += 20; State.profile.fastAnswers++; }
+        if(reactionMs!=null){ session.reactionTimes.push(reactionMs); }
+        session.score += pts; session.correct++;
+        Audio1.correct(); vibrate(15);
+        hudSet();
+      },
+      wrong(){
+        if(!session || session.ended) return;
+        session.combo = 0; session.wrong++;
+        session.score = Math.max(0, session.score-20);
+        session.lives = Math.max(0, session.lives-1);
+        Audio1.wrong(); vibrate([20,30,20]);
+        hudSet();
+        if(session.lives<=0){ finishRound(session.correct>session.wrong); }
+      },
+      setProgress(frac){ if(session){ session.progress = frac; hudSet(); } },
+      loseLife(){ this.wrong(); },
+      addCoins(n){ if(session) session.coins += n; },
+      finishRound(success, opts){ finishRound(success, opts); },
+      useHintBudget(){
+        if(!session || session.hintsUsed>=session.hintsMax) return false;
+        session.hintsUsed++; session.score = Math.max(0, session.score-10); hudSet();
+        return true;
+      },
+      hintsRemaining(){ return session? session.hintsMax-session.hintsUsed : 0; },
+      difficulty: null // filled by caller context if needed
+    };
+  }
+
+  function statsForSession(success){
+    const s = session;
+    const timeTaken = (Date.now()-s.startTime)/1000;
+    const totalAnswers = s.correct+s.wrong;
+    const accuracy = totalAnswers? s.correct/totalAnswers : (success?1:0);
+    const perfect = success && s.wrong===0 && s.correct>0;
+    let stars = 0;
+    if(success) stars = accuracy>=0.9 ? 3 : accuracy>=0.65 ? 2 : 1;
+    return { timeTaken, accuracy, perfect, stars };
+  }
+
+  function finishRound(success, opts){
+    if(!session || session.ended) return;
+    session.ended = true;
+    stopRoundTimer();
+    if(controller && controller.destroy){ try{ controller.destroy(); }catch(e){} }
+    const meta = session.meta;
+    const st = statsForSession(success);
+    const scoreFinal = Math.max(0, Math.round(session.score));
+    const dailyMult = meta.isDaily ? 2 : 1;
+    let coins = Math.round(scoreFinal/10) + (st.perfect?50:0) + session.coins;
+    let xp = Math.round(scoreFinal/5);
+    coins = Math.round(coins*dailyMult); xp = Math.round(xp*dailyMult);
+
+    const p = State.profile;
+    p.gamesPlayed++;
+    if(success) p.gamesWon++; else p.gamesLost++;
+    p.totalCorrect += session.correct; p.totalWrong += session.wrong;
+    p.highestCombo = Math.max(p.highestCombo, session.maxCombo);
+    if(session.reactionTimes.length){
+      session.reactionTimes.forEach(rt=>{
+        p.reactionSum += rt; p.reactionCount++;
+        if(p.bestReactionMs===null || rt<p.bestReactionMs) p.bestReactionMs = Math.round(rt);
+      });
+    }
+    const pg = ensurePerGame(meta.gameKey);
+    pg.played++; if(success) pg.won++; pg.correct+=session.correct; pg.wrong+=session.wrong; pg.best=Math.max(pg.best, scoreFinal);
+    p.streakCurrent = success ? p.streakCurrent+1 : 0;
+    p.streakBest = Math.max(p.streakBest, p.streakCurrent);
+    if(st.perfect){ p.perfectRounds++; p.cleanStreak++; } else { p.cleanStreak = 0; }
+    p.highestScore = Math.max(p.highestScore, scoreFinal);
+
+    if(!meta.isDaily && typeof meta.level==='number'){
+      p.levelStars[meta.level] = Math.max(p.levelStars[meta.level]||0, st.stars);
+      p.levelBest[meta.level] = Math.max(p.levelBest[meta.level]||0, scoreFinal);
+      if(success && meta.level === p.unlockedLevels) p.unlockedLevels = Math.min(TOTAL_LEVELS, meta.level+1);
+    }
+    if(meta.isDaily && success && !dailyAlreadyClaimedToday()){
+      p.lastDailyBonusDate = dateKey();
+      coins += 100; xp += 50;
+      showToast('Daily bonus claimed! +100 coins, +50 XP','🎁');
+    }
+    markPlayedToday();
+    registerSessionForChallenges(success, scoreFinal);
+    addCoins(coins); addXP(xp); addBP(scoreFinal);
+    recordBoardEntry({ game: meta.gameKey, level: meta.isDaily?'Daily':meta.level, score: scoreFinal, date: new Date().toLocaleDateString() });
+    saveProfile();
+    const newAchievements = checkAchievements();
+
+    renderResults(success, st, scoreFinal, coins, xp, meta);
+    if(success){ Confetti.burst(140); Audio1.levelup(); }
+    if(newAchievements.length){ setTimeout(()=>queueAchievementPopups(newAchievements), 700); }
+  }
+
+  function renderResults(success, st, scoreFinal, coins, xp, meta){
+    $('#resultTitle').textContent = success ? (meta.isDaily?'Daily Challenge Complete':'Level Complete') : 'Round Over';
+    $('#resultStars').textContent = success ? '⭐'.repeat(st.stars)+'☆'.repeat(3-st.stars) : '💫';
+    $('#resultScore').textContent = fmtNum(scoreFinal);
+    $('#resultStatsGrid').innerHTML = [
+      statCard('Accuracy', Math.round(st.accuracy*100)+'%'),
+      statCard('Time Taken', fmtTime(st.timeTaken)),
+      statCard('Coins Earned', '+'+fmtNum(coins)),
+      statCard('XP Earned', '+'+fmtNum(xp))
+    ].join('');
+    $('#achvUnlockedBox').innerHTML='';
+    const nextBtn = $('#resultNextBtn');
+    if(meta.isDaily){
+      nextBtn.textContent = 'Back to Daily Hub ➡️';
+      nextBtn.onclick = ()=>showScreen('dailyScreen');
+    } else if(success && meta.level<TOTAL_LEVELS){
+      nextBtn.textContent = 'Next Level ➡️';
+      nextBtn.disabled=false;
+      nextBtn.onclick = ()=>startLevel(meta.level+1);
+    } else if(success && meta.level>=TOTAL_LEVELS){
+      nextBtn.textContent = 'You beat them all! 🎉';
+      nextBtn.onclick = ()=>showScreen('levelSelectScreen');
+    } else {
+      nextBtn.textContent = 'Retry ➡️';
+      nextBtn.onclick = ()=>startLevel(meta.level);
+    }
+    $('#resultRetryBtn').onclick = ()=> meta.isDaily ? startDaily(dailyChallengeForToday()) : startLevel(meta.level);
+    showScreen('resultsScreen');
+  }
+
+  /* Pause / resume / restart / hint / skip wiring */
+  $('#pauseBtn').addEventListener('click', ()=>{
+    if(!session || session.ended) return;
+    paused = true;
+    if(controller && controller.pause){ try{controller.pause();}catch(e){} }
+    $('#pauseScoreText').textContent = fmtNum(Math.max(0,session.score));
+    $('#pauseModal').classList.add('active');
+  });
+  $('#pauseResumeBtn').addEventListener('click', ()=>{
+    paused = false;
+    $('#pauseModal').classList.remove('active');
+    if(controller && controller.resume){ try{controller.resume();}catch(e){} }
+  });
+  $('#pauseRestartBtn').addEventListener('click', ()=>{
+    $('#pauseModal').classList.remove('active');
+    stopRoundTimer();
+    if(controller && controller.destroy){ try{ controller.destroy(); }catch(e){} }
+    const meta = session.meta;
+    begin(meta);
+  });
+  $('#pauseQuitBtn').addEventListener('click', ()=>{
+    $('#pauseModal').classList.remove('active');
+    stopRoundTimer();
+    if(controller && controller.destroy){ try{controller.destroy();}catch(e){} }
+    session = null;
+    showScreen('levelSelectScreen');
+  });
+  $('#hintBtn').addEventListener('click', ()=>{
+    if(!session || session.ended || paused) return;
+    if(session.hintsUsed>=session.hintsMax){ showToast('No hints left this round','💡'); return; }
+    if(controller && controller.hint){
+      const used = controller.hint();
+      if(used===false) showToast('No hint available right now','💡');
+    }
+  });
+  $('#skipBtn').addEventListener('click', ()=>{
+    if(!session || session.ended || paused) return;
+    if(session.skipsUsed>=session.skipsMax){ showToast('No skips left this round','⏭️'); return; }
+    session.skipsUsed++;
+    if(controller && controller.skip){ try{ controller.skip(); }catch(e){} }
+  });
+
+  return { startLevel, startDaily };
+})();
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 6: SHARED GAME-BUILDING HELPERS
+========================================================= */
+const ICON_POOL = ['🍎','🍌','🍇','🍒','🍉','🍑','🥝','🍋','🍓','🥥','🍍','🥭','🍐','🍊','🥕','🌽','🍄','🌶️','🥑','🍆','⚽','🏀','🎾','🎲','🎯','🚀','🎈','🎨','🎸','⭐'];
+const SYMBOL_POOL = ['♠','♥','♦','♣','☀','☾','☂','✈','⚓','☕','☎','⚡','☘','✿','❄','⌘','♞','♜','♛','⚙'];
+const ARROWS = ['⬆️','➡️','⬇️','⬅️'];
+const COLOR_PADS = [
+  {name:'Red', hex:'#ff5c6c'}, {name:'Blue', hex:'#00b4ff'}, {name:'Green', hex:'#37ffb0'}, {name:'Yellow', hex:'#ffd166'},
+  {name:'Purple', hex:'#a35cff'}, {name:'Orange', hex:'#ff9a5c'}
+];
+const TONE_FREQS = [261.63, 329.63, 392.0, 523.25, 587.33, 659.25];
+
+function createDelay(ms, fn){
+  let remaining = ms, startedAt = 0, handle = null, active = false, done=false;
+  function arm(t){ handle = setTimeout(()=>{ active=false; done=true; fn(); }, t); active=true; startedAt = Date.now(); }
+  arm(ms);
+  return {
+    pause(){ if(active){ clearTimeout(handle); remaining -= (Date.now()-startedAt); active=false; } },
+    resume(){ if(!active && !done){ arm(Math.max(0,remaining)); } },
+    clear(){ clearTimeout(handle); active=false; }
+  };
+}
+function stageWrap(container){
+  const wrap = el('div');
+  wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:16px;width:100%;';
+  container.appendChild(wrap);
+  return wrap;
+}
+function makeTileGrid(cols){
+  const grid = el('div','tile-grid');
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(48px,70px))`;
+  return grid;
+}
+
+/* Generic "answer several multiple-choice questions in a row" runner.
+   opts.generateQuestion(diff, questionIndex) => {stimulusHtml, choices:[str], correctIndex, big?:bool} */
+function mountQA(container, api, diff, opts){
+  const total = opts.totalQuestions || clamp(5+diff.tier, 6, 14);
+  let qIndex=0, active=true, currentQ=null, destroyed=false;
+  const wrap = stageWrap(container);
+  const stimulus = el('div','glass stimulus-box'+(opts.bigStimulus?'':''));
+  if(opts.stimulusStyle) Object.assign(stimulus.style, opts.stimulusStyle);
+  const choicesBox = el('div','choice-grid');
+  if(opts.choiceCols) choicesBox.style.gridTemplateColumns = `repeat(${opts.choiceCols},1fr)`;
+  wrap.appendChild(stimulus); wrap.appendChild(choicesBox);
+
+  function next(){
+    if(destroyed) return;
+    if(qIndex>=total){ api.finishRound(true); return; }
+    api.setProgress(qIndex/total);
+    currentQ = opts.generateQuestion(diff, qIndex, api);
+    stimulus.innerHTML = currentQ.stimulusHtml;
+    choicesBox.innerHTML='';
+    const startT = Date.now();
+    const btns=[];
+    currentQ.choices.forEach((choiceText, idx)=>{
+      const b = el('button','choice-btn', choiceText);
+      b.addEventListener('click', ()=>{
+        if(!active || destroyed) return;
+        active=false;
+        const rt = Date.now()-startT;
+        btns.forEach(x=>x.disabled=true);
+        if(idx===currentQ.correctIndex){ b.classList.add('correct'); api.correct(100+diff.tier*5, rt); }
+        else{ b.classList.add('wrong'); if(btns[currentQ.correctIndex]) btns[currentQ.correctIndex].classList.add('correct'); api.wrong(); }
+        qIndex++;
+        setTimeout(()=>{ active=true; next(); }, 500);
+      });
+      btns.push(b);
+      choicesBox.appendChild(b);
+    });
+  }
+  next();
+  return {
+    pause(){ active=false; },
+    resume(){ active=true; },
+    restart(){},
+    hint(){
+      if(!currentQ) return false;
+      const wrongBtns = Array.from(choicesBox.children).filter((b,i)=>i!==currentQ.correctIndex && !b.disabled);
+      if(!wrongBtns.length) return false;
+      if(!api.useHintBudget()) return false;
+      const pick = choice(wrongBtns);
+      pick.style.opacity='0.25'; pick.disabled=true;
+      return true;
+    },
+    skip(){ qIndex++; active=true; next(); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}
+
+/* Generic "watch a sequence appear, then reproduce by clicking tiles in order" runner (one-shot per round, growing length across rounds). */
+function mountSequenceRecall(container, api, diff, opts){
+  // opts: tileCount, renderTile(el,item,idx), items(array to pick from), startLen, showDelay, gapDelay, totalRounds
+  const wrap = stageWrap(container);
+  const info = el('div','muted center', 'Watch closely...');
+  const grid = makeTileGrid(opts.cols || Math.ceil(Math.sqrt(opts.tileCount)));
+  wrap.appendChild(info); wrap.appendChild(grid);
+  let round=0, destroyed=false, active=true, awaitingInput=false, sequence=[], inputIdx=0;
+  const totalRounds = opts.totalRounds || clamp(3+Math.floor(diff.tier/2),3,8);
+  const tiles = Array.from({length:opts.tileCount}, (_,i)=>{
+    const t = el('div','mem-tile', opts.tileLabel? opts.tileLabel(i) : '');
+    t.addEventListener('click', ()=>{
+      if(!active || !awaitingInput || destroyed) return;
+      handleInput(i,t);
+    });
+    grid.appendChild(t);
+    return t;
+  });
+  function handleInput(i,t){
+    const expected = sequence[inputIdx];
+    if(i===expected){
+      t.classList.add('lit'); setTimeout(()=>t.classList.remove('lit'), 200);
+      inputIdx++;
+      if(inputIdx>=sequence.length){
+        awaitingInput=false;
+        api.correct(100+sequence.length*10, null);
+        api.setProgress(round/totalRounds);
+        round++;
+        if(round>=totalRounds){ setTimeout(()=>api.finishRound(true), 300); }
+        else setTimeout(playRound, 700);
+      }
+    } else {
+      t.classList.add('wrong'); setTimeout(()=>t.classList.remove('wrong'),300);
+      awaitingInput=false;
+      api.wrong();
+      setTimeout(playRound, 800);
+    }
+  }
+  function playRound(){
+    if(destroyed) return;
+    const len = (opts.startLen||3) + round;
+    sequence = Array.from({length:len}, ()=>Math.floor(diff.rng()*opts.tileCount));
+    inputIdx=0; awaitingInput=false;
+    info.textContent = 'Watch closely...';
+    let i=0;
+    function showNext(){
+      if(destroyed) return;
+      if(i>=sequence.length){ awaitingInput=true; info.textContent='Your turn! ('+sequence.length+' steps)'; return; }
+      const idx=sequence[i];
+      tiles[idx].classList.add('lit');
+      if(opts.onShow) opts.onShow(idx);
+      setTimeout(()=>{ tiles[idx] && tiles[idx].classList.remove('lit'); i++; setTimeout(showNext, opts.gapDelay||220); }, opts.showDelay||500);
+    }
+    showNext();
+  }
+  playRound();
+  return {
+    pause(){ active=false; },
+    resume(){ active=true; },
+    restart(){},
+    hint(){
+      if(!awaitingInput || !api.useHintBudget()) return false;
+      const idx = sequence[inputIdx];
+      tiles[idx].classList.add('lit'); setTimeout(()=>tiles[idx].classList.remove('lit'), 500);
+      return true;
+    },
+    skip(){ round++; awaitingInput=false; if(round>=totalRounds) api.finishRound(true); else playRound(); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 7: GAME MODULES — TIER 1
+   (memoryCards, patternRecall, numberMemory, wordMemory)
+========================================================= */
+
+/* 1. Memory Cards — classic pair-flip matching */
+GAMES.memoryCards = { mount(container, diff, api){
+  const pairs = clamp(4+Math.floor(diff.tier/2), 4, 10);
+  const chosen = uniqueSample(ICON_POOL, pairs);
+  const deck = shuffle(chosen.concat(chosen));
+  const cols = Math.ceil(Math.sqrt(deck.length));
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Flip cards and find all '+pairs+' matching pairs.'));
+  const grid = el('div','tile-grid');
+  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(52px,74px))`;
+  wrap.appendChild(grid);
+  let flipped=[], lockBoard=false, matches=0, active=true, firstClickTime=null, destroyed=false;
+  const cardEls = deck.map((icon,i)=>{
+    const c = el('div','flip-card'); c.style.aspectRatio='1';
+    c.innerHTML = `<div class="flip-inner"><div class="flip-face flip-front">❔</div><div class="flip-face flip-back">${icon}</div></div>`;
+    c.addEventListener('click', ()=>{
+      if(!active||lockBoard||destroyed||c.classList.contains('flipped')||c.classList.contains('done')) return;
+      if(firstClickTime===null) firstClickTime=Date.now();
+      c.classList.add('flipped');
+      flipped.push({i,c});
+      if(flipped.length===2){
+        lockBoard=true;
+        const [a,b]=flipped;
+        const match = deck[a.i]===deck[b.i];
+        setTimeout(()=>{
+          if(destroyed) return;
+          if(match){
+            a.c.classList.add('done'); b.c.classList.add('done'); matches++;
+            api.correct(100, Date.now()-firstClickTime); firstClickTime=null;
+            api.setProgress(matches/pairs);
+            if(matches>=pairs) api.finishRound(true);
+          } else {
+            api.wrong();
+            a.c.classList.remove('flipped'); b.c.classList.remove('flipped');
+          }
+          flipped=[]; lockBoard=false;
+        }, 650);
+      }
+    });
+    grid.appendChild(c);
+    return c;
+  });
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!api.useHintBudget()) return false;
+      const unmatched = cardEls.filter(c=>!c.classList.contains('done') && !c.classList.contains('flipped'));
+      if(unmatched.length<2) return false;
+      const c = choice(unmatched);
+      c.classList.add('flipped');
+      setTimeout(()=>{ if(!c.classList.contains('done')) c.classList.remove('flipped'); }, 800);
+      return true;
+    },
+    skip(){ api.finishRound(matches>=Math.ceil(pairs/2)); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}};
+
+/* 2. Pattern Recall — memorize the lit tiles (simultaneous), then click the same set */
+GAMES.patternRecall = { mount(container, diff, api){
+  const size = clamp(3+Math.floor(diff.tier/3), 3, 5);
+  const total = size*size;
+  const litCount = clamp(3+diff.tier, 3, Math.floor(total*0.6));
+  const totalRounds = clamp(3+Math.floor(diff.tier/2), 3, 7);
+  const wrap = stageWrap(container);
+  const info = el('div','muted center','Memorize the lit tiles...');
+  const grid = makeTileGrid(size);
+  wrap.appendChild(info); wrap.appendChild(grid);
+  let round=0, destroyed=false, active=true, litSet=new Set(), picked=new Set(), phase='show', hideDelay=null;
+  const tiles = Array.from({length:total}, (_,i)=>{
+    const t = el('div','mem-tile');
+    t.addEventListener('click', ()=>{
+      if(!active || destroyed || phase!=='input' || picked.has(i)) return;
+      picked.add(i);
+      if(litSet.has(i)){
+        t.classList.add('lit');
+        if(picked.size===litSet.size){
+          const allCorrect = [...picked].every(p=>litSet.has(p));
+          finishRoundStep(allCorrect);
+        }
+      } else {
+        t.classList.add('wrong');
+        finishRoundStep(false);
+      }
+    });
+    grid.appendChild(t);
+    return t;
+  });
+  function finishRoundStep(success){
+    phase='result';
+    if(success){ api.correct(100+round*15, null); } else { api.wrong(); }
+    api.setProgress(round/totalRounds);
+    round++;
+    setTimeout(()=>{
+      tiles.forEach(t=>t.classList.remove('lit','wrong'));
+      if(round>=totalRounds) api.finishRound(true); else startRound();
+    }, 700);
+  }
+  function startRound(){
+    phase='show'; picked=new Set();
+    const idxs = shuffle(Array.from({length:total},(_,i)=>i)).slice(0,litCount);
+    litSet = new Set(idxs);
+    info.textContent = 'Memorize the lit tiles...';
+    idxs.forEach(i=>tiles[i].classList.add('lit'));
+    hideDelay = createDelay(1100+diff.tier*60, ()=>{
+      if(destroyed) return;
+      tiles.forEach(t=>t.classList.remove('lit'));
+      phase='input';
+      info.textContent = 'Click the '+litCount+' tiles you saw.';
+    });
+  }
+  startRound();
+  return {
+    pause(){ active=false; hideDelay && hideDelay.pause(); }, resume(){ active=true; hideDelay && hideDelay.resume(); }, restart(){},
+    hint(){
+      if(phase!=='input' || !api.useHintBudget()) return false;
+      const remaining = [...litSet].filter(i=>!picked.has(i));
+      if(!remaining.length) return false;
+      const i = choice(remaining);
+      tiles[i].classList.add('lit'); setTimeout(()=>tiles[i].classList.remove('lit'),500);
+      return true;
+    },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; hideDelay && hideDelay.clear(); }
+  };
+}};
+
+/* 3. Number Memory — memorize a growing number, then type it back */
+GAMES.numberMemory = { mount(container, diff, api){
+  const totalRounds = clamp(4+Math.floor(diff.tier/2), 4, 8);
+  const wrap = stageWrap(container);
+  const stimulus = el('div','glass stimulus-box','');
+  const inputRow = el('div','text-input-row');
+  inputRow.innerHTML = `<input type="tel" inputmode="numeric" id="numMemInput" placeholder="Type the number" disabled><button class="btn" id="numMemSubmit" disabled>Submit</button>`;
+  wrap.appendChild(stimulus); wrap.appendChild(inputRow);
+  let round=0, destroyed=false, active=true, currentNumber='', revealDelay=null;
+  const input = ()=>$('#numMemInput'); const submitBtn = ()=>$('#numMemSubmit');
+  function startRound(){
+    const len = 3+round+Math.floor(diff.tier/2);
+    currentNumber = Array.from({length:len}, ()=>Math.floor(diff.rng()*10)).join('');
+    stimulus.textContent = currentNumber;
+    input().value=''; input().disabled=true; submitBtn().disabled=true;
+    api.setProgress(round/totalRounds);
+    revealDelay = createDelay(900+len*350, ()=>{
+      if(destroyed) return;
+      stimulus.textContent = '❓';
+      input().disabled=false; submitBtn().disabled=false; input().focus();
+    });
+  }
+  function submit(){
+    if(!active || destroyed) return;
+    const val = input().value.trim();
+    const rt = Date.now()-roundInputStart;
+    if(val===currentNumber) api.correct(100+currentNumber.length*10, rt);
+    else api.wrong();
+    round++;
+    input().disabled=true; submitBtn().disabled=true;
+    if(round>=totalRounds) setTimeout(()=>api.finishRound(true), 400);
+    else setTimeout(startRound, 500);
+  }
+  let roundInputStart = Date.now();
+  submitBtn().onclick = submit;
+  input().addEventListener('focus', ()=>{ roundInputStart=Date.now(); });
+  input().addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  startRound();
+  return {
+    pause(){ active=false; revealDelay && revealDelay.pause(); }, resume(){ active=true; revealDelay && revealDelay.resume(); }, restart(){},
+    hint(){
+      if(input().disabled || !api.useHintBudget()) return false;
+      showToast('First digit: '+currentNumber[0], '💡');
+      return true;
+    },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; revealDelay && revealDelay.clear(); }
+  };
+}};
+
+/* 4. Word Memory — study a list, then answer yes/no recall questions */
+const WORD_BANK = ['APPLE','RIVER','CLOUD','TIGER','PLANET','GUITAR','FOREST','CANDLE','BRIDGE','SILVER','WINTER','PENCIL','MARKET','ISLAND','GARDEN','ROCKET','PUZZLE','DRAGON','CRYSTAL','WHISTLE','ANCHOR','BLANKET','CANYON','DOLPHIN','ECLIPSE','FEATHER','GALAXY','HARBOR','IGLOO','JUNGLE','KETTLE','LANTERN','MEADOW','NEBULA','ORCHARD','PYRAMID','QUARTZ','RAINBOW','SATELLITE','TORNADO'];
+GAMES.wordMemory = { mount(container, diff, api){
+  const studyCount = clamp(4+Math.floor(diff.tier/2), 4, 9);
+  const totalQuestions = clamp(5+diff.tier, 6, 12);
+  const studySet = uniqueSample(WORD_BANK, studyCount);
+  const wrap = stageWrap(container);
+  const info = el('div','muted center', 'Memorize these words...');
+  const listBox = el('div','glass', '');
+  listBox.style.cssText='padding:18px 22px; font-size:1.1rem; font-weight:700; line-height:1.8; text-align:center; max-width:420px;';
+  listBox.textContent = studySet.join('   ');
+  wrap.appendChild(info); wrap.appendChild(listBox);
+  let destroyed=false;
+  const delay = createDelay(1800+studyCount*550, ()=>{
+    if(destroyed) return;
+    listBox.remove(); info.remove();
+    startQuestions();
+  });
+  function startQuestions(){
+    const controller = mountQA(container, api, diff, {
+      totalQuestions,
+      generateQuestion(d, idx){
+        const showKnown = Math.random()<0.5;
+        const word = showKnown ? choice(studySet) : choice(WORD_BANK.filter(w=>!studySet.includes(w)));
+        const answer = studySet.includes(word);
+        return { stimulusHtml: `<div>Was <b>"${word}"</b> in the list?</div>`, choices:['Yes, it was','No, it wasn\'t'], correctIndex: answer?0:1 };
+      }
+    });
+    innerController = controller;
+  }
+  let innerController = null;
+  return {
+    pause(){ innerController ? innerController.pause() : delay.pause(); }, resume(){ innerController ? innerController.resume() : delay.resume(); }, restart(){},
+    hint(){ return innerController ? innerController.hint() : false; },
+    skip(){ innerController ? innerController.skip() : (delay.clear(), startQuestions()); },
+    destroy(){ destroyed=true; delay.clear(); innerController && innerController.destroy(); }
+  };
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 8: GAME MODULES — TIER 2
+   (sequenceMemory, simonSays, quickMath, mentalArithmetic)
+========================================================= */
+
+/* 5. Sequence Memory — watch the tile order, then reproduce (one-shot per round) */
+GAMES.sequenceMemory = { mount(container, diff, api){
+  const size = clamp(3+Math.floor(diff.tier/4), 3, 4);
+  return mountSequenceRecall(container, api, diff, {
+    tileCount: size*size, cols: size, startLen: 3,
+    tileLabel: (i)=>String(i+1),
+    totalRounds: clamp(3+Math.floor(diff.tier/2), 3, 7),
+    showDelay: 480, gapDelay: 200
+  });
+}};
+
+/* 6. Simon Says — classic cumulative color sequence (repeat full sequence each round) */
+GAMES.simonSays = { mount(container, diff, api){
+  const padCount = clamp(4+Math.floor(diff.tier/4), 4, 6);
+  const winLength = clamp(6+diff.tier, 7, 16);
+  return mountSimonStyle(container, api, diff, { padCount, winLength, shape:'square' });
+}};
+
+/* 7. Quick Math — fast simple arithmetic multiple choice */
+GAMES.quickMath = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(8+diff.tier, 9, 18),
+    choiceCols: 2,
+    generateQuestion(d){
+      const maxN = 8 + d.tier*4;
+      const ops = d.tier<3 ? ['+','-'] : d.tier<6 ? ['+','-','×'] : ['+','-','×','÷'];
+      const op = choice(ops);
+      let a = rndInt(1,maxN), b = rndInt(1,maxN), answer;
+      if(op==='+') answer=a+b;
+      else if(op==='-'){ if(b>a) [a,b]=[b,a]; answer=a-b; }
+      else if(op==='×'){ a=rndInt(1,Math.min(12,maxN)); b=rndInt(1,12); answer=a*b; }
+      else { b=rndInt(1,12); answer=rndInt(1,12); a=answer*b; }
+      const wrongs = new Set();
+      while(wrongs.size<3){ const delta = rndInt(-6,6)||1; const w = answer+delta*rndInt(1,3); if(w!==answer && w>=0) wrongs.add(w); }
+      const choices = shuffle([answer,...wrongs]);
+      return { stimulusHtml: `<div>${a} ${op} ${b} = ?</div>`, choices: choices.map(String), correctIndex: choices.indexOf(answer) };
+    }
+  });
+}};
+
+/* 8. Mental Arithmetic — chain several operations in your head */
+GAMES.mentalArithmetic = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(5+Math.floor(diff.tier/1.5), 6, 12),
+    choiceCols: 2,
+    generateQuestion(d){
+      let val = rndInt(2,10);
+      const steps = clamp(2+Math.floor(d.tier/2), 2, 5);
+      let text = 'Start with '+val+'.';
+      for(let i=0;i<steps;i++){
+        const type = choice(['add','sub','mul']);
+        if(type==='add'){ const n=rndInt(1,9); val+=n; text+=' Add '+n+'.'; }
+        else if(type==='sub'){ const n=rndInt(1,Math.min(9,val)); val-=n; text+=' Subtract '+n+'.'; }
+        else { const n=rndInt(2,3); val*=n; text+=' Multiply by '+n+'.'; }
+      }
+      const answer = val;
+      const wrongs = new Set();
+      while(wrongs.size<3){ const w = answer + rndInt(-8,8)*rndInt(1,2); if(w!==answer) wrongs.add(w); }
+      const choices = shuffle([answer,...wrongs]);
+      return { stimulusHtml: `<div style="font-size:1.1rem;">${text}<br><b>What's the result?</b></div>`, choices: choices.map(String), correctIndex: choices.indexOf(answer) };
+    }
+  });
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 9: GAME MODULES — TIER 3
+   (missingNumber, oddOneOut, shapeMatching, colorMatching)
+========================================================= */
+
+/* 9. Missing Number — find the missing number in the sequence */
+GAMES.missingNumber = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 14),
+    choiceCols: 4,
+    generateQuestion(d){
+      const len = 6;
+      const useMul = d.tier>=6 && Math.random()<0.4;
+      const start = rndInt(1, 10+d.tier*2);
+      const step = useMul ? rndInt(2,3) : rndInt(2,6+Math.floor(d.tier/2));
+      const seq = [];
+      for(let i=0;i<len;i++) seq.push(useMul ? start*Math.pow(step,i) : start+step*i);
+      const hideIdx = rndInt(1,len-2);
+      const answer = seq[hideIdx];
+      const display = seq.map((n,i)=>i===hideIdx?'<b style="color:var(--accent-2);">?</b>':n).join('  ,  ');
+      const wrongs = new Set();
+      while(wrongs.size<3){ const w = answer + rndInt(-step*2,step*2)*rndInt(1,2)||answer+1; if(w!==answer && w>0) wrongs.add(w); }
+      const choices = shuffle([answer,...wrongs]);
+      return { stimulusHtml:`<div style="font-size:1.4rem;">${display}</div>`, choices: choices.map(String), correctIndex: choices.indexOf(answer) };
+    }
+  });
+}};
+
+/* 10. Odd One Out — spot the tile that differs from the rest */
+GAMES.oddOneOut = { mount(container, diff, api){
+  const gridSize = clamp(3+Math.floor(diff.tier/4), 3, 4); // 3x3 .. 4x4
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+Math.floor(diff.tier/1.5), 7, 13),
+    choiceCols: gridSize,
+    generateQuestion(d){
+      const total = gridSize*gridSize;
+      const base = choice(ICON_POOL);
+      let odd = choice(ICON_POOL.filter(x=>x!==base));
+      const oddIdx = rndInt(0,total-1);
+      const choices = Array.from({length:total}, (_,i)=> i===oddIdx ? odd : base);
+      return { stimulusHtml:'<div>Find the icon that does not match the rest.</div>', choices, correctIndex: oddIdx };
+    }
+  });
+}};
+
+/* 11. Shape Matching — match the shape+color to its identical twin */
+const SHAPE_GLYPHS = ['▲','■','●','◆','★','⬟','⬢','▶'];
+const SHAPE_COLORS = ['#ff5c6c','#00b4ff','#37ffb0','#ffd166','#a35cff','#ff9a5c'];
+GAMES.shapeMatching = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 14),
+    choiceCols: 2,
+    generateQuestion(d){
+      const shape = choice(SHAPE_GLYPHS), color = choice(SHAPE_COLORS);
+      const correctHtml = `<span style="font-size:2.4rem; color:${color};">${shape}</span>`;
+      const distractCount = d.tier<4?3:3;
+      const distractors = [];
+      while(distractors.length<distractCount){
+        const s2 = Math.random()<0.5 ? choice(SHAPE_GLYPHS.filter(s=>s!==shape)) : shape;
+        const c2 = s2===shape ? choice(SHAPE_COLORS.filter(c=>c!==color)) : choice(SHAPE_COLORS);
+        distractors.push(`<span style="font-size:2.4rem; color:${c2};">${s2}</span>`);
+      }
+      const choices = shuffle([correctHtml, ...distractors]);
+      return { stimulusHtml: `<div>Find the exact match:</div>${correctHtml}`, choices, correctIndex: choices.indexOf(correctHtml) };
+    }
+  });
+}};
+
+/* 12. Color Matching — match the color name to the correct swatch */
+const NAMED_COLORS = [['Red','#ff5c6c'],['Blue','#00b4ff'],['Green','#37ffb0'],['Yellow','#ffd166'],['Purple','#a35cff'],['Orange','#ff9a5c'],['Pink','#ff8ac6'],['Teal','#2ce8c9']];
+GAMES.colorMatching = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 14),
+    choiceCols: 2,
+    generateQuestion(d){
+      const pool = NAMED_COLORS.slice(0, clamp(4+Math.floor(d.tier/2),4,NAMED_COLORS.length));
+      const [name, hex] = choice(pool);
+      const others = shuffle(pool.filter(c=>c[0]!==name)).slice(0,3);
+      const choices = shuffle([hex, ...others.map(o=>o[1])]).map(h=>`<div style="width:44px;height:44px;border-radius:12px;background:${h};margin:0 auto;"></div>`);
+      const correctHtml = `<div style="width:44px;height:44px;border-radius:12px;background:${hex};margin:0 auto;"></div>`;
+      return { stimulusHtml: `<div>Which swatch is <b style="color:${hex};">${name}</b>?</div>`, choices, correctIndex: choices.indexOf(correctHtml) };
+    }
+  });
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 10: GAME MODULES — TIER 4
+   (reflexTap, speedClick, visualSearch, findDifferences)
+========================================================= */
+
+/* 13. Reflex Tap — tap the instant the box turns green */
+GAMES.reflexTap = { mount(container, diff, api){
+  const totalRounds = clamp(5+Math.floor(diff.tier/2), 5, 10);
+  const wrap = stageWrap(container);
+  const box = el('div','glass stimulus-box','Get Ready...');
+  box.style.cssText += 'cursor:pointer; user-select:none; height:220px; font-size:1.6rem; font-weight:800;';
+  wrap.appendChild(box);
+  let round=0, destroyed=false, active=true, phase='wait', waitDelay=null, showTime=0;
+  function startRound(){
+    phase='wait'; box.style.background=''; box.textContent='Wait for green...';
+    box.classList.remove('flip-front');
+    api.setProgress(round/totalRounds);
+    const wait = rndInt(clamp(1600-diff.tier*60,600,1600), clamp(3000-diff.tier*80,1200,3000));
+    waitDelay = createDelay(wait, ()=>{
+      if(destroyed) return;
+      phase='go'; showTime=Date.now();
+      box.style.background='linear-gradient(135deg,#37ffb0,#00d4ff)'; box.style.color='#04231b';
+      box.textContent='TAP NOW!';
+    });
+  }
+  box.addEventListener('click', ()=>{
+    if(!active||destroyed) return;
+    if(phase==='wait'){
+      api.wrong();
+      box.textContent='Too soon!'; box.style.background='linear-gradient(135deg,#ff5c6c,#ff8a5c)';
+      round++;
+      setTimeout(()=>{ if(round>=totalRounds) api.finishRound(false); else startRound(); }, 600);
+    } else if(phase==='go'){
+      const rt = Date.now()-showTime;
+      api.correct(clamp(200-Math.floor(rt/6),40,200), rt);
+      box.textContent = rt+' ms!';
+      round++;
+      phase='result';
+      setTimeout(()=>{ if(round>=totalRounds) api.finishRound(true); else startRound(); }, 550);
+    }
+  });
+  startRound();
+  return {
+    pause(){ active=false; waitDelay&&waitDelay.pause(); }, resume(){ active=true; waitDelay&&waitDelay.resume(); }, restart(){},
+    hint(){ return false; },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; waitDelay&&waitDelay.clear(); }
+  };
+}};
+
+/* 14. Speed Click — click as many targets as possible before time runs out */
+GAMES.speedClick = { mount(container, diff, api){
+  const targetGoal = clamp(14+diff.tier*2, 16, 40);
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Click the moving target as many times as you can!'));
+  const arena = el('div','glass'); arena.style.cssText='position:relative; width:100%; max-width:340px; height:300px; overflow:hidden;';
+  wrap.appendChild(arena);
+  const target = el('div','', '🎯'); target.style.cssText='position:absolute; width:52px; height:52px; font-size:2rem; display:flex; align-items:center; justify-content:center; cursor:pointer; border-radius:50%; background:rgba(124,92,255,0.25);';
+  arena.appendChild(target);
+  let hits=0, destroyed=false, active=true;
+  function place(){
+    const w = arena.clientWidth||300, h = arena.clientHeight||300;
+    target.style.left = rndInt(0, Math.max(0,w-56))+'px';
+    target.style.top = rndInt(0, Math.max(0,h-56))+'px';
+  }
+  target.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!active||destroyed) return;
+    hits++; api.correct(60,null); api.setProgress(hits/targetGoal);
+    if(hits>=targetGoal){ api.finishRound(true); return; }
+    place();
+  });
+  arena.addEventListener('click', ()=>{ if(active && !destroyed) api.wrong(); });
+  place();
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){ return false; },
+    skip(){ api.finishRound(hits>=Math.ceil(targetGoal/2)); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}};
+
+/* 15. Visual Search — find the requested icon hidden among distractors */
+GAMES.visualSearch = { mount(container, diff, api){
+  const gridSize = clamp(3+Math.floor(diff.tier/3), 3, 5);
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(5+Math.floor(diff.tier/1.5), 6, 12),
+    choiceCols: gridSize,
+    generateQuestion(d){
+      const total = gridSize*gridSize;
+      const target = choice(ICON_POOL);
+      const targetIdx = rndInt(0,total-1);
+      const choices = Array.from({length:total}, (_,i)=> i===targetIdx ? target : choice(ICON_POOL.filter(x=>x!==target)));
+      return { stimulusHtml:`<div>Find this icon: <span style="font-size:1.6rem;">${target}</span></div>`, choices, correctIndex: targetIdx };
+    }
+  });
+}};
+
+/* 16. Find Differences — spot which tile differs between the two rows */
+GAMES.findDifferences = { mount(container, diff, api){
+  const len = clamp(5+Math.floor(diff.tier/2), 5, 9);
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(5+Math.floor(diff.tier/1.5), 6, 12),
+    choiceCols: len>6?4:len,
+    generateQuestion(d){
+      const top = uniqueSample(ICON_POOL, len);
+      const bottom = top.slice();
+      const diffIdx = rndInt(0,len-1);
+      bottom[diffIdx] = choice(ICON_POOL.filter(x=>!top.includes(x)));
+      const topRow = `<div style="display:flex; gap:8px; justify-content:center; font-size:1.5rem;">${top.map(t=>`<span>${t}</span>`).join('')}</div>`;
+      return { stimulusHtml:`<div>Which tile below differs from the row above?</div>${topRow}`, choices: bottom, correctIndex: diffIdx };
+    }
+  });
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 11: GAME MODULES — TIER 5
+   (sudokuLite, logicGrid, mazeEscape, connectDots)
+========================================================= */
+
+/* 17. Sudoku Lite — fill the 4x4 grid so every row/column/box holds 1-4 */
+function generateSudoku4(rng){
+  let grid = [[1,2,3,4],[3,4,1,2],[2,1,4,3],[4,3,2,1]];
+  const perm = shuffle([1,2,3,4]);
+  grid = grid.map(row=>row.map(v=>perm[v-1]));
+  const rBand = Math.random()<0.5 ? [shuffle([0,1]),shuffle([2,3])] : [shuffle([2,3]),shuffle([0,1])];
+  const rowOrder = [...rBand[0], ...rBand[1]];
+  grid = rowOrder.map(r=>grid[r]);
+  const cBand = Math.random()<0.5 ? [shuffle([0,1]),shuffle([2,3])] : [shuffle([2,3]),shuffle([0,1])];
+  const colOrder = [...cBand[0], ...cBand[1]];
+  grid = grid.map(row => colOrder.map(c=>row[c]));
+  return grid;
+}
+GAMES.sudokuLite = { mount(container, diff, api){
+  const solution = generateSudoku4(diff.rng);
+  const removeCount = clamp(4+Math.floor(diff.tier/1.5), 4, 10);
+  const cellsFlat = shuffle(Array.from({length:16},(_,i)=>i)).slice(0,removeCount);
+  const given = Array.from({length:4},()=>Array(4).fill(true));
+  cellsFlat.forEach(idx=>{ given[Math.floor(idx/4)][idx%4]=false; });
+  const userVals = solution.map(row=>row.slice());
+  cellsFlat.forEach(idx=>{ userVals[Math.floor(idx/4)][idx%4]=null; });
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Fill every row, column and 2x2 box with 1-4. Tap a cell, then pick a number.'));
+  const grid = el('div','tile-grid'); grid.style.gridTemplateColumns='repeat(4, minmax(52px,66px))';
+  wrap.appendChild(grid);
+  const numPad = el('div','choice-grid'); numPad.style.gridTemplateColumns='repeat(4,1fr)'; numPad.style.maxWidth='280px';
+  [1,2,3,4].forEach(n=>{
+    const b = el('button','choice-btn', String(n));
+    b.addEventListener('click', ()=>{ if(active && selected) placeNumber(n); });
+    numPad.appendChild(b);
+  });
+  wrap.appendChild(numPad);
+  let selected=null, active=true, filledCorrect=0, destroyed=false;
+  const cellEls = [];
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      const cell = el('div','mem-tile');
+      if(given[r][c]){ cell.textContent = solution[r][c]; cell.classList.add('matched'); }
+      else {
+        cell.textContent='';
+        cell.addEventListener('click', ()=>{
+          if(!active||destroyed) return;
+          cellEls.forEach(x=>x.el.style.outline='');
+          selected = {r,c,el:cell};
+          cell.style.outline='3px solid var(--accent-2)';
+        });
+      }
+      cell.style.fontSize='1.3rem';
+      grid.appendChild(cell);
+      cellEls.push({r,c,el:cell,given:given[r][c]});
+    }
+  }
+  function placeNumber(n){
+    if(!selected) return;
+    const {r,c,el:cellEl} = selected;
+    if(userVals[r][c]!==null) return;
+    if(n===solution[r][c]){
+      userVals[r][c]=n; cellEl.textContent=n; cellEl.classList.add('matched');
+      cellEl.style.outline=''; selected=null; filledCorrect++;
+      api.correct(90+diff.tier*5, null);
+      api.setProgress(filledCorrect/removeCount);
+      if(filledCorrect>=removeCount) api.finishRound(true);
+    } else {
+      cellEl.style.background='rgba(255,92,108,0.5)';
+      setTimeout(()=>{ cellEl.style.background=''; }, 350);
+      api.wrong();
+    }
+  }
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!api.useHintBudget()) return false;
+      const empties = cellEls.filter(c=>userVals[c.r][c.c]===null);
+      if(!empties.length) return false;
+      const target = choice(empties);
+      target.el.textContent = solution[target.r][target.c];
+      target.el.classList.add('matched');
+      userVals[target.r][target.c]=solution[target.r][target.c];
+      filledCorrect++;
+      api.setProgress(filledCorrect/removeCount);
+      if(filledCorrect>=removeCount) api.finishRound(true);
+      return true;
+    },
+    skip(){ api.finishRound(filledCorrect>=Math.ceil(removeCount/2)); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}};
+
+/* 18. Logic Grid — use the clues to deduce the correct answer */
+const LOGIC_CATEGORIES = [
+  {label:'fruit', items:['Apple','Banana','Cherry','Mango','Grape','Kiwi']},
+  {label:'pet', items:['Dog','Cat','Parrot','Rabbit','Turtle','Hamster']},
+  {label:'color', items:['Red','Blue','Green','Yellow','Purple','Orange']},
+  {label:'sport', items:['Soccer','Tennis','Chess','Swimming','Cycling','Boxing']},
+  {label:'job', items:['Doctor','Teacher','Pilot','Chef','Artist','Engineer']}
+];
+const LOGIC_NAMES = ['Alice','Bob','Carol','David','Emma','Frank','Grace','Henry'];
+GAMES.logicGrid = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(5+Math.floor(diff.tier/1.5), 6, 11),
+    choiceCols: 2,
+    generateQuestion(d){
+      const cat = choice(LOGIC_CATEGORIES);
+      const people = uniqueSample(LOGIC_NAMES, 3);
+      const items = uniqueSample(cat.items, 3);
+      const targetIdx = rndInt(0,2);
+      const others = [0,1,2].filter(i=>i!==targetIdx);
+      const clues = others.map(i=>`${people[i]} likes ${items[i]}.`);
+      const extraItem = choice(cat.items.filter(x=>!items.includes(x)));
+      const choicesArr = shuffle([items[targetIdx], extraItem, ...items.filter((_,i)=>i!==targetIdx).slice(0,1)]);
+      return {
+        stimulusHtml: `<div style="text-align:left; max-width:380px;">${clues.join('<br>')}<br><br><b>Who likes what? What ${cat.label} does ${people[targetIdx]} like?</b></div>`,
+        choices: choicesArr, correctIndex: choicesArr.indexOf(items[targetIdx])
+      };
+    }
+  });
+}};
+
+/* 19. Maze Escape — guide the dot through the maze to the exit */
+function generateMaze(w,h,rng){
+  const cells = Array.from({length:h},()=>Array.from({length:w},()=>({N:true,S:true,E:true,W:true,visited:false})));
+  const stack=[[0,0]]; cells[0][0].visited=true;
+  const dirs=[['N',0,-1,'S'],['S',0,1,'N'],['E',1,0,'W'],['W',-1,0,'E']];
+  while(stack.length){
+    const [x,y]=stack[stack.length-1];
+    const neighbors=[];
+    for(const [d,dx,dy,opp] of dirs){
+      const nx=x+dx, ny=y+dy;
+      if(nx>=0&&nx<w&&ny>=0&&ny<h&&!cells[ny][nx].visited) neighbors.push([d,dx,dy,opp,nx,ny]);
+    }
+    if(!neighbors.length){ stack.pop(); continue; }
+    const [d,dx,dy,opp,nx,ny] = neighbors[Math.floor(rng()*neighbors.length)];
+    cells[y][x][d]=false; cells[ny][nx][opp]=false;
+    cells[ny][nx].visited=true;
+    stack.push([nx,ny]);
+  }
+  return cells;
+}
+GAMES.mazeEscape = { mount(container, diff, api){
+  const size = clamp(4+Math.floor(diff.tier/2), 4, 8);
+  const maze = generateMaze(size,size,diff.rng);
+  let px=0, py=0; const ex=size-1, ey=size-1;
+  const initialDist = Math.abs(ex-px)+Math.abs(ey-py);
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Guide the dot 🔵 through the maze to the flag 🏁.'));
+  const cellPx = clamp(Math.floor(280/size), 24, 52);
+  const grid = el('div'); grid.style.cssText=`display:grid; grid-template-columns:repeat(${size},${cellPx}px); gap:0; background:rgba(0,0,0,0.2); border-radius:12px; padding:6px;`;
+  wrap.appendChild(grid);
+  let destroyed=false, active=true, cellEls=[];
+  function render(){
+    grid.innerHTML='';
+    for(let y=0;y<size;y++){
+      for(let x=0;x<size;x++){
+        const c = maze[y][x];
+        const d = el('div');
+        d.style.cssText = `width:${cellPx}px; height:${cellPx}px; box-sizing:border-box; display:flex; align-items:center; justify-content:center; font-size:${Math.floor(cellPx*0.6)}px;
+          border-top:${c.N?'2px solid rgba(255,255,255,0.5)':'2px solid transparent'};
+          border-left:${c.W?'2px solid rgba(255,255,255,0.5)':'2px solid transparent'};
+          border-right:${c.E?'2px solid rgba(255,255,255,0.5)':'2px solid transparent'};
+          border-bottom:${c.S?'2px solid rgba(255,255,255,0.5)':'2px solid transparent'};`;
+        if(x===px&&y===py) d.textContent='🔵';
+        else if(x===ex&&y===ey) d.textContent='🏁';
+        grid.appendChild(d);
+      }
+    }
+  }
+  function move(dx,dy){
+    if(!active||destroyed) return;
+    const c = maze[py][px];
+    let blocked=false;
+    if(dx===1) blocked = c.E; else if(dx===-1) blocked = c.W; else if(dy===1) blocked = c.S; else if(dy===-1) blocked = c.N;
+    if(blocked){ api.wrong(); return; }
+    px = clamp(px+dx,0,size-1); py = clamp(py+dy,0,size-1);
+    const dist = Math.abs(ex-px)+Math.abs(ey-py);
+    api.setProgress(clamp(1-dist/Math.max(1,initialDist),0,1));
+    if(px===ex && py===ey){ api.correct(250+diff.tier*10, null); render(); setTimeout(()=>api.finishRound(true), 250); return; }
+    render();
+  }
+  const controls = el('div','grid grid-3'); controls.style.maxWidth='200px';
+  const mkBtn = (label,dx,dy,pos)=>{ const b=el('button','btn small secondary',label); b.style.gridColumn=pos; b.onclick=()=>move(dx,dy); return b; };
+  controls.appendChild(el('div')); controls.appendChild(mkBtn('▲',0,-1,'2')); controls.appendChild(el('div'));
+  controls.appendChild(mkBtn('◀',-1,0,'1')); controls.appendChild(mkBtn('▼',0,1,'2')); controls.appendChild(mkBtn('▶',1,0,'3'));
+  wrap.appendChild(controls);
+  function keyHandler(e){
+    if(!active||destroyed) return;
+    if(e.key==='ArrowUp') move(0,-1); else if(e.key==='ArrowDown') move(0,1);
+    else if(e.key==='ArrowLeft') move(-1,0); else if(e.key==='ArrowRight') move(1,0);
+  }
+  document.addEventListener('keydown', keyHandler);
+  render();
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!api.useHintBudget()) return false;
+      const dx = ex>px?1:ex<px?-1:0, dy = ey>py?1:ey<py?-1:0;
+      showToast(dx!==0 ? (dx>0?'Try moving right ▶':'Try moving left ◀') : (dy>0?'Try moving down ▼':'Try moving up ▲'), '💡');
+      return true;
+    },
+    skip(){ api.finishRound(false); },
+    destroy(){ destroyed=true; active=false; document.removeEventListener('keydown', keyHandler); }
+  };
+}};
+
+/* 20. Connect Dots — click the numbered dots in ascending order */
+GAMES.connectDots = { mount(container, diff, api){
+  const count = clamp(6+Math.floor(diff.tier/1.2), 6, 16);
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Click the dots in order: 1 → '+count));
+  const arena = el('div','glass'); arena.style.cssText='position:relative; width:100%; max-width:360px; height:320px;';
+  wrap.appendChild(arena);
+  let destroyed=false, active=true, next=1;
+  const positions = [];
+  const minDist = 50;
+  for(let i=0;i<count;i++){
+    let pos, tries=0;
+    do{ pos = {x:rndInt(20,300), y:rndInt(20,280)}; tries++; }
+    while(tries<40 && positions.some(p=>Math.hypot(p.x-pos.x,p.y-pos.y)<minDist));
+    positions.push(pos);
+  }
+  const dotEls = positions.map((pos,i)=>{
+    const d = el('div','', String(i+1));
+    d.style.cssText = `position:absolute; left:${pos.x}px; top:${pos.y}px; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; cursor:pointer; background:var(--glass-bg-strong); border:1px solid var(--glass-bd);`;
+    d.addEventListener('click', ()=>{
+      if(!active||destroyed) return;
+      if(i+1===next){
+        d.style.background='linear-gradient(135deg,#37ffb0,#00d4ff)'; d.style.color='#04231b';
+        api.correct(80, null); next++; api.setProgress((next-1)/count);
+        if(next>count) api.finishRound(true);
+      } else {
+        d.style.background='linear-gradient(135deg,#ff5c6c,#ff8a5c)';
+        setTimeout(()=>{ if(i+1>=next) d.style.background='var(--glass-bg-strong)'; },300);
+        api.wrong();
+      }
+    });
+    arena.appendChild(d);
+    return d;
+  });
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!api.useHintBudget()) return false;
+      const el2 = dotEls[next-1]; if(!el2) return false;
+      el2.style.boxShadow='0 0 0 4px var(--accent-4)'; setTimeout(()=>{ el2.style.boxShadow=''; },700);
+      return true;
+    },
+    skip(){ api.finishRound(next>Math.ceil(count/2)); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 12: GAME MODULES — TIER 6
+   (spotPattern, rotateShape, clockReading, directionMemory)
+========================================================= */
+
+/* 21. Spot Pattern — choose the item that completes the pattern */
+GAMES.spotPattern = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+Math.floor(diff.tier/1.5), 7, 13),
+    choiceCols: 4,
+    generateQuestion(d){
+      const type = choice(['dots','color','shape']);
+      if(type==='dots'){
+        const start = rndInt(1,3), step = rndInt(1,2);
+        const seq = [0,1,2,3].map(i=>start+step*i);
+        const correct = start+step*4;
+        const row = seq.map(n=>'●'.repeat(n)).join('&nbsp;&nbsp;|&nbsp;&nbsp;');
+        const wrongs = new Set(); while(wrongs.size<3){ const w=correct+rndInt(-2,2)*(rndInt(1,2)); if(w>0&&w!==correct) wrongs.add(w); }
+        const opts = shuffle([correct,...wrongs]);
+        return { stimulusHtml:`<div style="font-size:1.3rem; letter-spacing:2px;">${row}&nbsp;&nbsp;|&nbsp;&nbsp;?</div>`, choices: opts.map(n=>'●'.repeat(n)), correctIndex: opts.indexOf(correct) };
+      } else if(type==='color'){
+        const cycle = uniqueSample(SHAPE_COLORS,3);
+        const seq = [cycle[0],cycle[1],cycle[2],cycle[0],cycle[1]];
+        const correct = cycle[2];
+        const dot = (c)=>`<span style="display:inline-block;width:26px;height:26px;border-radius:50%;background:${c};margin:0 4px;"></span>`;
+        const wrongs = shuffle(SHAPE_COLORS.filter(c=>c!==correct)).slice(0,3);
+        const opts = shuffle([correct,...wrongs]);
+        return { stimulusHtml:`<div>${seq.map(dot).join('')} ?</div>`, choices: opts.map(dot), correctIndex: opts.indexOf(correct) };
+      } else {
+        const shapes = SHAPE_GLYPHS;
+        const idx = rndInt(0,shapes.length-1);
+        const seq = [0,1,2].map(i=>shapes[(idx+i)%shapes.length]);
+        const correct = shapes[(idx+3)%shapes.length];
+        const wrongs = shuffle(shapes.filter(s=>s!==correct)).slice(0,3);
+        const opts = shuffle([correct,...wrongs]);
+        return { stimulusHtml:`<div style="font-size:1.6rem;">${seq.join(' &nbsp; ')} &nbsp; ?</div>`, choices: opts, correctIndex: opts.indexOf(correct) };
+      }
+    }
+  });
+}};
+
+/* 22. Rotate Shape — decide whether the second shape is a pure rotation of the first */
+function rotateGrid3(g){ const out=Array(9); for(let r=0;r<3;r++)for(let c=0;c<3;c++) out[r*3+c]=g[(2-c)*3+r]; return out; }
+function mirrorGrid3(g){ const out=Array(9); for(let r=0;r<3;r++)for(let c=0;c<3;c++) out[r*3+c]=g[r*3+(2-c)]; return out; }
+const ROTATE_BASE_SHAPES = [
+  [1,0,0, 1,0,0, 1,1,0],
+  [1,1,1, 1,0,0, 1,0,0],
+  [0,1,0, 0,1,0, 1,1,1],
+  [1,1,0, 0,1,0, 0,1,1],
+  [1,0,0, 1,1,1, 0,0,1]
+];
+function renderGrid3(g, color){
+  return `<div style="display:inline-grid; grid-template-columns:repeat(3,20px); gap:3px;">${g.map(v=>`<div style="width:20px;height:20px;border-radius:4px;background:${v?color:'rgba(255,255,255,0.08)'};"></div>`).join('')}</div>`;
+}
+GAMES.rotateShape = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 14),
+    choiceCols: 2,
+    generateQuestion(d){
+      const base = choice(ROTATE_BASE_SHAPES);
+      const isRotation = Math.random()<0.5;
+      let transformed = base;
+      const rotations = rndInt(1,3);
+      for(let i=0;i<rotations;i++) transformed = rotateGrid3(transformed);
+      if(!isRotation) transformed = mirrorGrid3(transformed);
+      const html = `<div style="display:flex; gap:24px; align-items:center; justify-content:center;">${renderGrid3(base,'#00d4ff')}<span style="font-size:1.4rem;">→</span>${renderGrid3(transformed,'#ff5ca8')}</div>`;
+      return { stimulusHtml:`<div>Is the pink shape just a <b>rotation</b> of the blue shape?</div>${html}`, choices:['Yes, rotated','No, it is different'], correctIndex: isRotation?0:1 };
+    }
+  });
+}};
+
+/* 23. Clock Reading — read the analog clock, pick the matching digital time */
+GAMES.clockReading = { mount(container, diff, api){
+  const minuteStep = diff.tier<4 ? 15 : diff.tier<8 ? 5 : 1;
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 13),
+    choiceCols: 2,
+    generateQuestion(d){
+      const hour = rndInt(1,12), minute = Math.floor(rndInt(0,59/minuteStep)*minuteStep);
+      const hourAngle = ((hour%12)+minute/60)*30, minuteAngle = minute*6;
+      const face = `<div style="position:relative; width:130px; height:130px; border-radius:50%; background:var(--glass-bg-strong); border:2px solid var(--glass-bd); margin:0 auto;">
+        <div style="position:absolute; left:50%; top:50%; width:4px; height:38px; background:var(--text-1); transform-origin:bottom; transform:translate(-50%,-100%) rotate(${hourAngle}deg); border-radius:3px;"></div>
+        <div style="position:absolute; left:50%; top:50%; width:3px; height:52px; background:var(--accent-2); transform-origin:bottom; transform:translate(-50%,-100%) rotate(${minuteAngle}deg); border-radius:3px;"></div>
+        <div style="position:absolute; left:50%; top:50%; width:8px; height:8px; background:var(--accent-4); border-radius:50%; transform:translate(-50%,-50%);"></div>
+      </div>`;
+      const fmt = (h,m)=> (h===0?12:h)+':'+pad2(m);
+      const correct = fmt(hour,minute);
+      const wrongs = new Set();
+      while(wrongs.size<3){
+        const wh = clamp(hour+choice([-1,1,2]),1,12), wm = choice([0,15,30,45,minute]);
+        const w = fmt(wh,wm); if(w!==correct) wrongs.add(w);
+      }
+      const opts = shuffle([correct,...wrongs]);
+      return { stimulusHtml: face, choices: opts, correctIndex: opts.indexOf(correct) };
+    }
+  });
+}};
+
+/* 24. Direction Memory — memorize the arrow sequence, then repeat it */
+GAMES.directionMemory = { mount(container, diff, api){
+  return mountSequenceRecall(container, api, diff, {
+    tileCount: 4, cols: 4, startLen: 3,
+    tileLabel: (i)=>`<span style="font-size:1.8rem;">${ARROWS[i]}</span>`,
+    totalRounds: clamp(3+Math.floor(diff.tier/2), 3, 7),
+    showDelay: 500, gapDelay: 220
+  });
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 13: GAME MODULES — TIER 7
+   (alphabetSequence, wordBuilder, unscrambleWord, spellingChallenge)
+========================================================= */
+
+const CLUE_WORDS = [
+  {w:'APPLE', clue:'A common fruit that can be red or green.'},
+  {w:'RIVER', clue:'A natural flowing stream of water.'},
+  {w:'CLOUD', clue:'A white or grey mass floating in the sky.'},
+  {w:'TIGER', clue:'A large striped big cat.'},
+  {w:'PLANET', clue:'A large body that orbits a star.'},
+  {w:'GUITAR', clue:'A stringed musical instrument.'},
+  {w:'FOREST', clue:'A large area densely covered with trees.'},
+  {w:'CANDLE', clue:'A wax stick with a wick that provides light.'},
+  {w:'BRIDGE', clue:'A structure that crosses a river or valley.'},
+  {w:'WINTER', clue:'The coldest season of the year.'},
+  {w:'MARKET', clue:'A place where goods are bought and sold.'},
+  {w:'ISLAND', clue:'A piece of land surrounded by water.'},
+  {w:'GARDEN', clue:'An area for growing flowers or vegetables.'},
+  {w:'ROCKET', clue:'A vehicle that travels into space.'},
+  {w:'DRAGON', clue:'A mythical fire-breathing creature.'},
+  {w:'CRYSTAL', clue:'A clear, solid mineral formation.'},
+  {w:'ANCHOR', clue:'A heavy object used to keep a ship in place.'},
+  {w:'CANYON', clue:'A deep gorge, often carved by a river.'},
+  {w:'HARBOR', clue:'A sheltered area where ships can dock.'},
+  {w:'JUNGLE', clue:'A dense tropical forest.'},
+  {w:'METEOR', clue:'A space rock that burns up in the atmosphere.'},
+  {w:'VOLCANO', clue:'A mountain that can erupt with lava.'},
+  {w:'GLACIER', clue:'A slow-moving mass of ice.'},
+  {w:'COMPASS', clue:'A tool whose needle always points north.'}
+];
+
+/* Shared "tap letters in order to build the word" runner */
+function mountLetterBuilder(container, api, diff, opts){
+  const totalRounds = opts.totalRounds;
+  let round=0, destroyed=false, active=true, target='', letters=[], answer=[];
+  const wrap = stageWrap(container);
+  const clueBox = el('div','glass stimulus-box','');
+  const answerRow = el('div',''); answerRow.style.cssText='display:flex; gap:8px; flex-wrap:wrap; justify-content:center; min-height:56px;';
+  const tileRow = el('div',''); tileRow.style.cssText='display:flex; gap:8px; flex-wrap:wrap; justify-content:center; max-width:480px;';
+  const btnRow = el('div',''); btnRow.style.cssText='display:flex; gap:10px;';
+  const clearBtn = el('button','btn small secondary','Clear'); const submitBtn = el('button','btn small','Submit');
+  btnRow.appendChild(clearBtn); btnRow.appendChild(submitBtn);
+  wrap.appendChild(clueBox); wrap.appendChild(answerRow); wrap.appendChild(tileRow); wrap.appendChild(btnRow);
+
+  function renderAnswer(){
+    answerRow.innerHTML = Array.from({length:target.length}, (_,i)=> `<div class="glass-strong" style="width:32px;height:38px;display:flex;align-items:center;justify-content:center;font-weight:800;border-radius:8px;">${answer[i]||''}</div>`).join('');
+  }
+  function startRound(){
+    const r = opts.getRound(diff, round);
+    target = r.target.toUpperCase();
+    answer = [];
+    clueBox.innerHTML = r.clueHtml || 'Unscramble the letters below.';
+    const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').filter(c=>!target.includes(c));
+    const decoys = opts.decoyCount ? uniqueSample(alphabet, Math.min(opts.decoyCount, alphabet.length)) : [];
+    letters = shuffle(target.split('').concat(decoys));
+    tileRow.innerHTML='';
+    letters.forEach((ch)=>{
+      const b = el('button','choice-btn', ch); b.style.cssText='padding:10px 16px; font-size:1.1rem; min-width:44px;';
+      b.dataset.used='0';
+      b.addEventListener('click', ()=>{
+        if(!active||destroyed||b.dataset.used==='1') return;
+        if(answer.length>=target.length) return;
+        answer.push(ch); b.dataset.used='1'; b.style.opacity='0.25'; b.disabled=true;
+        renderAnswer();
+        if(answer.length===target.length) trySubmit();
+      });
+      tileRow.appendChild(b);
+    });
+    renderAnswer();
+    api.setProgress(round/totalRounds);
+  }
+  function resetTiles(){
+    answer=[];
+    Array.from(tileRow.children).forEach(b=>{ b.dataset.used='0'; b.style.opacity='1'; b.disabled=false; });
+    renderAnswer();
+  }
+  function trySubmit(){
+    if(!active||destroyed) return;
+    const guess = answer.join('');
+    if(guess===target){ api.correct(110+diff.tier*5, null); round++; setTimeout(()=>{ if(round>=totalRounds) api.finishRound(true); else startRound(); }, 500); }
+    else { api.wrong(); setTimeout(resetTiles, 400); }
+  }
+  submitBtn.addEventListener('click', trySubmit);
+  clearBtn.addEventListener('click', resetTiles);
+  startRound();
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!api.useHintBudget()) return false;
+      const nextIdx = answer.length;
+      if(nextIdx>=target.length) return false;
+      const neededChar = target[nextIdx];
+      const btn = Array.from(tileRow.children).find(b=>b.textContent===neededChar && b.dataset.used==='0');
+      if(!btn) return false;
+      btn.click();
+      return true;
+    },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; }
+  };
+}
+
+/* 25. Alphabet Sequence — pick the letter that continues the pattern */
+GAMES.alphabetSequence = { mount(container, diff, api){
+  const ALPHA='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+diff.tier, 7, 14),
+    choiceCols: 4,
+    generateQuestion(d){
+      const step = d.tier<4?1:rndInt(1,2);
+      const startIdx = rndInt(0, ALPHA.length-1-step*4);
+      const seq = [0,1,2,3].map(i=>ALPHA[startIdx+i*step]);
+      const correctIdx = startIdx+4*step;
+      const correct = ALPHA[correctIdx];
+      const wrongs = new Set();
+      while(wrongs.size<3){ const w = ALPHA[clamp(correctIdx+rndInt(-4,4),0,25)]; if(w!==correct) wrongs.add(w); }
+      const opts = shuffle([correct,...wrongs]);
+      return { stimulusHtml:`<div style="font-size:1.5rem; letter-spacing:4px;">${seq.join(' - ')} - ?</div>`, choices:opts, correctIndex:opts.indexOf(correct) };
+    }
+  });
+}};
+
+/* 26. Word Builder — tap letters (plus decoys) in order to build the clued word */
+GAMES.wordBuilder = { mount(container, diff, api){
+  return mountLetterBuilder(container, api, diff, {
+    totalRounds: clamp(4+Math.floor(diff.tier/2), 4, 8),
+    decoyCount: clamp(1+Math.floor(diff.tier/3), 1, 3),
+    getRound(d){
+      const item = choice(CLUE_WORDS);
+      return { target:item.w, clueHtml:`<div>${item.clue}</div>` };
+    }
+  });
+}};
+
+/* 27. Unscramble Word — reorder the scrambled letters to reveal the word */
+GAMES.unscrambleWord = { mount(container, diff, api){
+  return mountLetterBuilder(container, api, diff, {
+    totalRounds: clamp(5+Math.floor(diff.tier/1.5), 5, 10),
+    decoyCount: 0,
+    getRound(d){
+      const word = choice(WORD_BANK);
+      return { target:word, clueHtml:'<div>Unscramble the letters to form a word.</div>' };
+    }
+  });
+}};
+
+/* 28. Spelling Challenge — study the word briefly, then spell it from memory */
+GAMES.spellingChallenge = { mount(container, diff, api){
+  const totalRounds = clamp(5+Math.floor(diff.tier/1.5), 5, 10);
+  const wrap = stageWrap(container);
+  const stimulus = el('div','glass stimulus-box','');
+  const inputRow = el('div','text-input-row');
+  inputRow.innerHTML = `<input type="text" id="spellInput" placeholder="Type the word" disabled autocomplete="off" autocapitalize="off"><button class="btn" id="spellSubmit" disabled>Submit</button>`;
+  wrap.appendChild(stimulus); wrap.appendChild(inputRow);
+  let round=0, destroyed=false, active=true, currentWord='', revealDelay=null, startT=0;
+  const input=()=>$('#spellInput'); const submitBtn=()=>$('#spellSubmit');
+  function startRound(){
+    const candidates = WORD_BANK.filter(w=>w.length>=4+Math.floor(diff.tier/3));
+    currentWord = candidates.length ? choice(candidates) : choice(WORD_BANK);
+    stimulus.textContent = currentWord;
+    input().value=''; input().disabled=true; submitBtn().disabled=true;
+    api.setProgress(round/totalRounds);
+    revealDelay = createDelay(1000+currentWord.length*300, ()=>{
+      if(destroyed) return;
+      stimulus.textContent='✏️ Now spell it!';
+      input().disabled=false; submitBtn().disabled=false; input().focus(); startT=Date.now();
+    });
+  }
+  function submit(){
+    if(!active||destroyed) return;
+    const val = input().value.trim().toUpperCase();
+    const rt = Date.now()-startT;
+    if(val===currentWord) api.correct(100+currentWord.length*8, rt); else api.wrong();
+    round++;
+    input().disabled=true; submitBtn().disabled=true;
+    if(round>=totalRounds) setTimeout(()=>api.finishRound(true),400);
+    else setTimeout(startRound,500);
+  }
+  submitBtn().onclick=submit;
+  input().addEventListener('keydown', e=>{ if(e.key==='Enter') submit(); });
+  startRound();
+  return {
+    pause(){ active=false; revealDelay&&revealDelay.pause(); }, resume(){ active=true; revealDelay&&revealDelay.resume(); }, restart(){},
+    hint(){ if(input().disabled || !api.useHintBudget()) return false; showToast('Starts with "'+currentWord[0]+'", '+currentWord.length+' letters','💡'); return true; },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; revealDelay&&revealDelay.clear(); }
+  };
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 14: GAME MODULES — TIER 8
+   (vocabularyQuiz, generalIQQuiz, trivia, codingLogicPuzzle)
+========================================================= */
+
+/* Generic "shuffled question bank, no immediate repeats" chooser */
+function makeBankPicker(bank){
+  let pool = shuffle(bank.slice());
+  return function pick(){
+    if(!pool.length) pool = shuffle(bank.slice());
+    return pool.pop();
+  };
+}
+
+/* 29. Vocabulary Quiz — pick the correct definition of the word */
+GAMES.vocabularyQuiz = { mount(container, diff, api){
+  const pick = makeBankPicker(CLUE_WORDS);
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+Math.floor(diff.tier/1.2), 7, 14),
+    choiceCols: 1,
+    generateQuestion(){
+      const item = pick();
+      const others = shuffle(CLUE_WORDS.filter(x=>x.w!==item.w)).slice(0,3);
+      const choices = shuffle([item.clue, ...others.map(o=>o.clue)]);
+      return { stimulusHtml:`<div>What does <b>${item.w}</b> mean?</div>`, choices, correctIndex: choices.indexOf(item.clue) };
+    }
+  });
+}};
+
+/* 30. General IQ Quiz — general reasoning questions */
+const IQ_QUESTIONS = [
+  {q:'Which word does not belong: Apple, Banana, Carrot, Mango?', choices:['Apple','Banana','Carrot','Mango'], a:2},
+  {q:'Book is to Reading as Fork is to?', choices:['Cooking','Eating','Kitchen','Cutting'], a:1},
+  {q:'If all Zorks are Blips and all Blips are Fups, are all Zorks Fups?', choices:['Yes','No','Cannot be determined','Only sometimes'], a:0},
+  {q:'Which number does not belong: 4, 8, 15, 16, 22?', choices:['4','8','15','22'], a:2},
+  {q:'Hand is to Glove as Foot is to?', choices:['Shoe','Sock','Leg','Toe'], a:0},
+  {q:'Which shape has the most sides: Triangle, Square, Pentagon, Hexagon?', choices:['Triangle','Square','Pentagon','Hexagon'], a:3},
+  {q:'Bird is to Nest as Bear is to?', choices:['Forest','Den','Cave','Tree'], a:1},
+  {q:'What comes next: 2, 4, 8, 16, ?', choices:['20','24','32','30'], a:2},
+  {q:'Doctor is to Hospital as Teacher is to?', choices:['Book','Student','School','Class'], a:2},
+  {q:'Which is the odd one out: Circle, Square, Triangle, Red?', choices:['Circle','Square','Triangle','Red'], a:3},
+  {q:'If today is Monday, what day is it in 10 days?', choices:['Wednesday','Thursday','Friday','Saturday'], a:1},
+  {q:'Water is to Thirsty as Food is to?', choices:['Full','Hungry','Eat','Kitchen'], a:1},
+  {q:'Which number completes the pattern: 1, 4, 9, 16, ?', choices:['20','24','25','21'], a:2},
+  {q:'Puppy is to Dog as Kitten is to?', choices:['Kitty','Cat','Feline','Meow'], a:1},
+  {q:'Which is heavier: 1kg of feathers or 1kg of iron?', choices:['Feathers','Iron','Equal','Cannot tell'], a:2},
+  {q:'Pilot is to Airplane as Captain is to?', choices:['Sky','Ship','Ocean','Wheel'], a:1},
+  {q:'What is the next letter: A, C, F, J, ?', choices:['M','N','O','P'], a:2},
+  {q:'Which word means the opposite of Ancient?', choices:['Old','Modern','Historic','Antique'], a:1},
+  {q:'A farmer has 17 sheep, all but 9 die. How many are left?', choices:['8','9','17','0'], a:1},
+  {q:'Which one is a prime number: 21, 27, 29, 33?', choices:['21','27','29','33'], a:2},
+  {q:'If you rearrange the letters "LISTEN", you get another word. Which?', choices:['SILENT','ENTILS','TINSEL','LINTES'], a:0},
+  {q:'Which comes next in the series: Z, X, V, T, ?', choices:['S','R','Q','U'], a:1},
+  {q:'A clock shows 3:15. What angle do the hour and minute hands roughly form?', choices:['0°','7.5°','90°','180°'], a:1},
+  {q:'Which is the odd one out: Whale, Dolphin, Shark, Salmon?', choices:['Whale','Dolphin','Shark','Salmon'], a:2}
+];
+GAMES.generalIQQuiz = { mount(container, diff, api){
+  const pick = makeBankPicker(IQ_QUESTIONS);
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+Math.floor(diff.tier/1.2), 7, 14),
+    choiceCols: 1,
+    generateQuestion(){
+      const item = pick();
+      return { stimulusHtml:`<div>${item.q}</div>`, choices:item.choices, correctIndex:item.a };
+    }
+  });
+}};
+
+/* 31. Trivia — general knowledge questions */
+const TRIVIA_QUESTIONS = [
+  {q:'What is the largest planet in our solar system?', choices:['Earth','Jupiter','Saturn','Mars'], a:1},
+  {q:'How many continents are there on Earth?', choices:['5','6','7','8'], a:2},
+  {q:'What is the chemical symbol for water?', choices:['H2O','O2','CO2','HO'], a:0},
+  {q:'Which ocean is the largest?', choices:['Atlantic','Indian','Arctic','Pacific'], a:3},
+  {q:'What is the capital of Japan?', choices:['Seoul','Beijing','Tokyo','Bangkok'], a:2},
+  {q:'How many legs does a spider have?', choices:['6','8','10','12'], a:1},
+  {q:'What gas do plants absorb from the air?', choices:['Oxygen','Nitrogen','Carbon Dioxide','Hydrogen'], a:2},
+  {q:'Who painted the Mona Lisa?', choices:['Van Gogh','Picasso','Da Vinci','Monet'], a:2},
+  {q:'What is the smallest prime number?', choices:['0','1','2','3'], a:2},
+  {q:'How many days are in a leap year?', choices:['364','365','366','367'], a:2},
+  {q:'What is the hardest natural substance on Earth?', choices:['Gold','Iron','Diamond','Quartz'], a:2},
+  {q:'Which planet is known as the Red Planet?', choices:['Venus','Mars','Mercury','Jupiter'], a:1},
+  {q:'What is the boiling point of water at sea level (Celsius)?', choices:['90°','100°','110°','120°'], a:1},
+  {q:'How many strings does a standard guitar have?', choices:['4','5','6','7'], a:2},
+  {q:'What is the largest mammal in the world?', choices:['Elephant','Blue Whale','Giraffe','Hippo'], a:1},
+  {q:'Which country is home to the kangaroo?', choices:['South Africa','Australia','India','Brazil'], a:1},
+  {q:'What is the currency of Japan?', choices:['Won','Yuan','Yen','Ringgit'], a:2},
+  {q:'How many colors are in a rainbow?', choices:['5','6','7','8'], a:2},
+  {q:'What organ pumps blood through the body?', choices:['Lungs','Liver','Heart','Kidney'], a:2},
+  {q:'Which language has the most native speakers worldwide?', choices:['English','Spanish','Mandarin Chinese','Hindi'], a:2},
+  {q:'What is the freezing point of water in Celsius?', choices:['-10°','0°','10°','32°'], a:1},
+  {q:'Which planet has the most moons in our solar system?', choices:['Earth','Mars','Saturn','Neptune'], a:2},
+  {q:'What do bees collect from flowers?', choices:['Water','Nectar','Sap','Pollen only'], a:1},
+  {q:'How many sides does a hexagon have?', choices:['5','6','7','8'], a:1},
+  {q:'What is the tallest mountain in the world?', choices:['K2','Everest','Kilimanjaro','Denali'], a:1},
+  {q:'Which metal is liquid at room temperature?', choices:['Lead','Mercury','Iron','Zinc'], a:1},
+  {q:'What is the largest desert in the world?', choices:['Sahara','Gobi','Antarctic','Arabian'], a:2},
+  {q:'How many bones are in the adult human body?', choices:['186','206','226','246'], a:1},
+  {q:'What is the main gas that makes up Earth\'s atmosphere?', choices:['Oxygen','Carbon Dioxide','Nitrogen','Hydrogen'], a:2},
+  {q:'Which fruit is known for keeping doctors away?', choices:['Banana','Apple','Orange','Grape'], a:1}
+];
+GAMES.trivia = { mount(container, diff, api){
+  const pick = makeBankPicker(TRIVIA_QUESTIONS);
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(6+Math.floor(diff.tier/1.2), 7, 14),
+    choiceCols: 1,
+    generateQuestion(){
+      const item = pick();
+      return { stimulusHtml:`<div>${item.q}</div>`, choices:item.choices, correctIndex:item.a };
+    }
+  });
+}};
+
+/* 32. Coding Logic Puzzle — predict the output of simple pseudo-code */
+GAMES.codingLogicPuzzle = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(5+Math.floor(diff.tier/1.5), 6, 11),
+    choiceCols: 4,
+    generateQuestion(d){
+      const type = choice(['trace','loop','cond']);
+      let code, answer;
+      if(type==='trace'){
+        let x = rndInt(1,9), y = rndInt(1,9);
+        const steps = [];
+        steps.push(`x = ${x}`);
+        const op1 = choice(['+','-']); const n1 = rndInt(1,9);
+        y = op1==='+' ? x+n1 : x-n1; steps.push(`y = x ${op1} ${n1}`);
+        const op2 = choice(['+','-']); const n2 = rndInt(1,9);
+        x = op2==='+' ? y+n2 : y-n2; steps.push(`x = y ${op2} ${n2}`);
+        code = steps.join('\n')+'\nWhat is x?';
+        answer = x;
+      } else if(type==='loop'){
+        const arr = Array.from({length:rndInt(3,5)}, ()=>rndInt(1,9));
+        code = `total = 0\nfor n in [${arr.join(', ')}]:\n  total = total + n\nWhat is total?`;
+        answer = arr.reduce((a,b)=>a+b,0);
+      } else {
+        const x = rndInt(1,20);
+        const threshold = rndInt(5,15);
+        code = `x = ${x}\nif x > ${threshold}:\n  result = 1\nelse:\n  result = 0\nWhat is result?`;
+        answer = x>threshold ? 1 : 0;
+      }
+      const wrongs = new Set();
+      while(wrongs.size<3){ const w = answer + rndInt(-5,5)||answer+1; if(w!==answer) wrongs.add(w); }
+      const opts = shuffle([answer,...wrongs]);
+      return { stimulusHtml:`<pre style="text-align:left; font-family:monospace; font-size:0.95rem; white-space:pre-wrap;">${code}</pre>`, choices:opts.map(String), correctIndex:opts.indexOf(answer) };
+    }
+  });
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 15: GAME MODULES — TIER 9
+   (emojiMemory, symbolMatching, concentrationTest, focusChallenge)
+========================================================= */
+
+/* 33. Emoji Memory — memorize emoji positions, then recall where the target was */
+GAMES.emojiMemory = { mount(container, diff, api){
+  const size = clamp(3+Math.floor(diff.tier/6), 3, 4);
+  const total = size*size;
+  const totalRounds = clamp(3+Math.floor(diff.tier/2), 3, 7);
+  const wrap = stageWrap(container);
+  const info = el('div','muted center', 'Memorize the positions...');
+  const targetBox = el('div','glass stimulus-box',''); targetBox.style.display='none';
+  const grid = makeTileGrid(size);
+  wrap.appendChild(info); wrap.appendChild(targetBox); wrap.appendChild(grid);
+  let round=0, destroyed=false, active=true, assignment=[], targetIcon='', targetIdx=-1, phase='show', revealDelay=null;
+  const tiles = Array.from({length:total}, (_,i)=>{
+    const t = el('div','mem-tile','');
+    t.addEventListener('click', ()=>{
+      if(!active||destroyed||phase!=='input') return;
+      phase='result';
+      if(i===targetIdx){ t.classList.add('matched'); api.correct(100+diff.tier*8, null); }
+      else { t.classList.add('wrong'); api.wrong(); tiles[targetIdx].classList.add('matched'); }
+      round++;
+      api.setProgress(round/totalRounds);
+      setTimeout(()=>{ if(round>=totalRounds) api.finishRound(true); else startRound(); }, 700);
+    });
+    grid.appendChild(t);
+    return t;
+  });
+  function startRound(){
+    phase='show';
+    tiles.forEach(t=>{ t.textContent=''; t.className='mem-tile'; });
+    assignment = uniqueSample(ICON_POOL, total);
+    tiles.forEach((t,i)=>t.textContent=assignment[i]);
+    targetIdx = rndInt(0,total-1); targetIcon = assignment[targetIdx];
+    info.textContent='Memorize the positions...'; targetBox.style.display='none';
+    revealDelay = createDelay(1000+total*260, ()=>{
+      if(destroyed) return;
+      tiles.forEach(t=>t.textContent='');
+      targetBox.style.display='flex'; targetBox.innerHTML = `Where was <span style="font-size:2rem;">${targetIcon}</span> ?`;
+      info.textContent='Tap the matching tile.';
+      phase='input';
+    });
+  }
+  startRound();
+  return {
+    pause(){ active=false; revealDelay&&revealDelay.pause(); }, resume(){ active=true; revealDelay&&revealDelay.resume(); }, restart(){},
+    hint(){
+      if(phase!=='input' || !api.useHintBudget()) return false;
+      tiles[targetIdx].style.boxShadow='0 0 0 4px var(--accent-4)'; setTimeout(()=>{ tiles[targetIdx].style.boxShadow=''; },600);
+      return true;
+    },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; revealDelay&&revealDelay.clear(); }
+  };
+}};
+
+/* 34. Symbol Matching — match the symbol shown to its identical partner, fast */
+GAMES.symbolMatching = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(8+diff.tier, 9, 18),
+    choiceCols: 2,
+    generateQuestion(d){
+      const sym = choice(SYMBOL_POOL);
+      const correctHtml = `<span style="font-size:2.2rem;">${sym}</span>`;
+      const distractors = uniqueSample(SYMBOL_POOL.filter(s=>s!==sym), 3).map(s=>`<span style="font-size:2.2rem;">${s}</span>`);
+      const choices = shuffle([correctHtml, ...distractors]);
+      return { stimulusHtml:`<div>Match this symbol: <span style="font-size:2rem;">${sym}</span></div>`, choices, correctIndex: choices.indexOf(correctHtml) };
+    }
+  });
+}};
+
+/* 35. Concentration Test — ignore the display color, tap what the word says */
+GAMES.concentrationTest = { mount(container, diff, api){
+  return mountQA(container, api, diff, {
+    totalQuestions: clamp(8+diff.tier, 9, 18),
+    choiceCols: 2,
+    generateQuestion(d){
+      const words = NAMED_COLORS;
+      const wordItem = choice(words);
+      const displayItem = choice(words.filter(w=>w[0]!==wordItem[0]));
+      const others = shuffle(words.filter(w=>w[0]!==wordItem[0] && w[0]!==displayItem[0])).slice(0,2);
+      const choices = shuffle([wordItem[0], displayItem[0], ...others.map(o=>o[0])]);
+      return { stimulusHtml:`<div>What does this word <b>say</b> (ignore its color)?<br><span style="font-size:2rem; font-weight:800; color:${displayItem[1]};">${wordItem[0].toUpperCase()}</span></div>`, choices, correctIndex: choices.indexOf(wordItem[0]) };
+    }
+  });
+}};
+
+/* 36. Focus Challenge — tap only when the target icon appears, ignore distractors */
+GAMES.focusChallenge = { mount(container, diff, api){
+  const totalFrames = clamp(14+diff.tier, 16, 28);
+  const frameMs = clamp(1000-diff.tier*35, 550, 950);
+  const target = choice(ICON_POOL);
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center', `Tap TAP only when you see ${target}. Ignore everything else!`));
+  const box = el('div','glass stimulus-box', '');
+  const tapBtn = el('button','btn block success','TAP!'); tapBtn.style.maxWidth='220px';
+  wrap.appendChild(box); wrap.appendChild(tapBtn);
+  let frame=0, destroyed=false, active=true, responded=false, isTargetFrame=false, frameDelay=null;
+  function nextFrame(){
+    if(destroyed) return;
+    if(frame>=totalFrames){ api.finishRound(true); return; }
+    responded=false;
+    isTargetFrame = Math.random()<0.35;
+    const icon = isTargetFrame ? target : choice(ICON_POOL.filter(x=>x!==target));
+    box.innerHTML = `<span style="font-size:2.6rem;">${icon}</span>`;
+    api.setProgress(frame/totalFrames);
+    frameDelay = createDelay(frameMs, ()=>{
+      if(destroyed) return;
+      if(isTargetFrame && !responded){ api.wrong(); } // missed the target
+      frame++;
+      nextFrame();
+    });
+  }
+  tapBtn.addEventListener('click', ()=>{
+    if(!active||destroyed||responded) return;
+    responded=true;
+    if(isTargetFrame){ api.correct(70,null); } else { api.wrong(); }
+  });
+  nextFrame();
+  return {
+    pause(){ active=false; frameDelay&&frameDelay.pause(); }, resume(){ active=true; frameDelay&&frameDelay.resume(); }, restart(){},
+    hint(){ return false; },
+    skip(){ api.finishRound(true); },
+    destroy(){ destroyed=true; active=false; frameDelay&&frameDelay.clear(); }
+  };
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 16: GAME MODULES — TIER 10
+   (colorSequence, soundMemory, reactionTimer, dualTaskChallenge)
+========================================================= */
+
+/* Shared cumulative Simon-style engine, reused by Simon Says / Color Sequence / Sound Memory */
+function mountSimonStyle(container, api, diff, opts){
+  const padCount = opts.padCount;
+  const pads = COLOR_PADS.slice(0, padCount).concat(COLOR_PADS).slice(0, padCount);
+  const winLength = opts.winLength;
+  const wrap = stageWrap(container);
+  const info = el('div','muted center','Watch the sequence...');
+  const grid = el('div','grid grid-2'); grid.style.maxWidth = padCount>4 ? '360px':'320px'; grid.style.width='100%';
+  if(padCount>4) grid.className='grid grid-3';
+  wrap.appendChild(info); wrap.appendChild(grid);
+  let destroyed=false, active=true, sequence=[], inputIdx=0, awaitingInput=false, showChain=null;
+  const padEls = pads.map((p,i)=>{
+    const b = el('div','glass', opts.shape==='key' ? '<span style="font-size:1.3rem;">♪</span>' : '');
+    const shapeRadius = opts.shape==='key' ? '10px' : '18px';
+    b.style.cssText=`height:${padCount>4?70:80}px;border-radius:${shapeRadius};cursor:pointer;background:${p.hex};opacity:0.5;transition:opacity .15s ease, transform .1s ease;display:flex;align-items:center;justify-content:center;color:#fff;`;
+    b.addEventListener('click', ()=>{
+      if(!active||!awaitingInput||destroyed) return;
+      flashPad(i, 160);
+      const expected = sequence[inputIdx];
+      if(i===expected){
+        inputIdx++;
+        if(inputIdx>=sequence.length){
+          awaitingInput=false;
+          api.correct(80+sequence.length*8, null);
+          api.setProgress(clamp(sequence.length/winLength,0,1));
+          if(sequence.length>=winLength){ setTimeout(()=>api.finishRound(true),300); }
+          else setTimeout(()=>{ sequence.push(Math.floor(diff.rng()*padCount)); playSequence(); }, 700);
+        }
+      } else {
+        api.wrong(); awaitingInput=false;
+        setTimeout(()=>{ sequence=[Math.floor(diff.rng()*padCount)]; inputIdx=0; playSequence(); }, 800);
+      }
+    });
+    grid.appendChild(b);
+    return b;
+  });
+  function flashPad(i, ms){ padEls[i].style.opacity='1'; padEls[i].style.transform='scale(0.94)'; setTimeout(()=>{ padEls[i].style.opacity='0.5'; padEls[i].style.transform='scale(1)'; }, ms); }
+  function playSequence(){
+    if(destroyed) return;
+    awaitingInput=false; inputIdx=0;
+    info.textContent = 'Watch the sequence... ('+sequence.length+')';
+    let i=0;
+    function step(){
+      if(destroyed) return;
+      if(i>=sequence.length){ awaitingInput=true; info.textContent='Your turn!'; return; }
+      flashPad(sequence[i], 320);
+      Audio1.playTone(TONE_FREQS[sequence[i]%TONE_FREQS.length]);
+      i++;
+      showChain = setTimeout(step, 430);
+    }
+    step();
+  }
+  sequence=[Math.floor(diff.rng()*padCount)];
+  playSequence();
+  return {
+    pause(){ active=false; }, resume(){ active=true; }, restart(){},
+    hint(){
+      if(!awaitingInput || !api.useHintBudget()) return false;
+      flashPad(sequence[inputIdx], 500);
+      return true;
+    },
+    skip(){ api.finishRound(sequence.length>=Math.ceil(winLength/2)); },
+    destroy(){ destroyed=true; active=false; if(showChain) clearTimeout(showChain); }
+  };
+}
+
+/* 37. Color Sequence — a bigger, longer color-position memory challenge */
+GAMES.colorSequence = { mount(container, diff, api){
+  return mountSimonStyle(container, api, diff, {
+    padCount: 6, winLength: clamp(10+diff.tier, 12, 22), shape:'square'
+  });
+}};
+
+/* 38. Sound Memory — listen to the tone sequence, then replay it in order */
+GAMES.soundMemory = { mount(container, diff, api){
+  return mountSimonStyle(container, api, diff, {
+    padCount: clamp(4+Math.floor(diff.tier/5), 4, 5), winLength: clamp(8+diff.tier, 9, 18), shape:'key'
+  });
+}};
+
+/* 39. Reaction Timer — click the instant the circle turns green */
+GAMES.reactionTimer = { mount(container, diff, api){
+  const totalRounds = clamp(5+Math.floor(diff.tier/2), 5, 10);
+  const wrap = stageWrap(container);
+  wrap.appendChild(el('div','muted center','Click the circle the instant it turns green.'));
+  const circle = el('div','', 'WAIT');
+  circle.style.cssText='width:170px;height:170px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;cursor:pointer;background:linear-gradient(135deg,#ff5c6c,#ff8a5c);color:#fff;user-select:none;';
+  wrap.appendChild(circle);
+  const timesBox = el('div','muted center', '');
+  wrap.appendChild(timesBox);
+  let round=0, destroyed=false, active=true, phase='wait', waitDelay=null, showTime=0, times=[];
+  function startRound(){
+    phase='wait'; circle.style.background='linear-gradient(135deg,#ff5c6c,#ff8a5c)'; circle.textContent='WAIT';
+    api.setProgress(round/totalRounds);
+    const wait = rndInt(clamp(1400-diff.tier*50,500,1400), clamp(2800-diff.tier*70,1000,2800));
+    waitDelay = createDelay(wait, ()=>{
+      if(destroyed) return;
+      phase='go'; showTime=Date.now();
+      circle.style.background='linear-gradient(135deg,#37ffb0,#00d4ff)'; circle.style.color='#04231b'; circle.textContent='CLICK!';
+    });
+  }
+  circle.addEventListener('click', ()=>{
+    if(!active||destroyed) return;
+    if(phase==='wait'){
+      api.wrong();
+      circle.textContent='Too soon!';
+      round++;
+      setTimeout(()=>{ if(round>=totalRounds) api.finishRound(times.length>0); else startRound(); }, 600);
+    } else if(phase==='go'){
+      const rt = Date.now()-showTime;
+      times.push(rt);
+      api.correct(clamp(220-Math.floor(rt/5),40,220), rt);
+      circle.textContent = rt+' ms';
+      timesBox.textContent = 'Best so far: '+Math.min(...times)+' ms';
+      round++; phase='result';
+      setTimeout(()=>{ if(round>=totalRounds) api.finishRound(true); else startRound(); }, 500);
+    }
+  });
+  startRound();
+  return {
+    pause(){ active=false; waitDelay&&waitDelay.pause(); }, resume(){ active=true; waitDelay&&waitDelay.resume(); }, restart(){},
+    hint(){ return false; },
+    skip(){ round++; if(round>=totalRounds) api.finishRound(true); else startRound(); },
+    destroy(){ destroyed=true; active=false; waitDelay&&waitDelay.clear(); }
+  };
+}};
+
+/* 40. Dual Task Challenge — answer a math prompt while tracking a background count */
+GAMES.dualTaskChallenge = { mount(container, diff, api){
+  const totalRounds = clamp(5+Math.floor(diff.tier/1.5), 6, 11);
+  const wrap = stageWrap(container);
+  const counterBox = el('div','badge','🔴 seen: 0');
+  wrap.appendChild(counterBox);
+  wrap.appendChild(el('div','muted center','Count the red squares flashing in the background AND answer each math question.'));
+  const stimulus = el('div','glass stimulus-box','');
+  const choicesBox = el('div','choice-grid'); choicesBox.style.gridTemplateColumns='repeat(2,1fr)';
+  wrap.appendChild(stimulus); wrap.appendChild(choicesBox);
+  let round=0, destroyed=false, active=true, redCount=0, flashDelay=null;
+  function flashBackground(){
+    if(destroyed) return;
+    const isRed = Math.random()<0.4;
+    if(isRed){ redCount++; counterBox.textContent = '🔴 seen: '+redCount; document.body.style.boxShadow='inset 0 0 0 6px rgba(255,92,108,0.5)'; }
+    else document.body.style.boxShadow='inset 0 0 0 6px rgba(0,212,255,0.15)';
+    setTimeout(()=>{ document.body.style.boxShadow=''; }, 220);
+    flashDelay = createDelay(rndInt(700,1300), flashBackground);
+  }
+  function next(){
+    if(destroyed) return;
+    if(round>=totalRounds){
+      askFinalCount();
+      return;
+    }
+    api.setProgress(round/(totalRounds+1));
+    const a=rndInt(1,9+diff.tier), b=rndInt(1,9+diff.tier);
+    const op = choice(['+','-']);
+    const answer = op==='+' ? a+b : Math.abs(a-b);
+    const wrongs = new Set(); while(wrongs.size<3){ const w=answer+rndInt(-4,4)||answer+1; if(w!==answer&&w>=0) wrongs.add(w); }
+    const opts = shuffle([answer,...wrongs]);
+    stimulus.innerHTML = `<div>${a} ${op==='+'?'+':'-'} ${b} = ?</div>`;
+    choicesBox.innerHTML='';
+    opts.forEach(val=>{
+      const b2 = el('button','choice-btn', String(val));
+      b2.onclick = ()=>{
+        if(!active||destroyed) return;
+        if(val===answer){ b2.classList.add('correct'); api.correct(90+diff.tier*4, null); }
+        else { b2.classList.add('wrong'); api.wrong(); }
+        round++;
+        setTimeout(next, 450);
+      };
+      choicesBox.appendChild(b2);
+    });
+  }
+  function askFinalCount(){
+    stimulus.innerHTML = '<div>How many 🔴 red flashes did you count in total?</div>';
+    choicesBox.innerHTML='';
+    const wrongs = new Set(); while(wrongs.size<3){ const w=redCount+rndInt(-3,3); if(w!==redCount&&w>=0) wrongs.add(w); }
+    const opts = shuffle([redCount,...wrongs]);
+    opts.forEach(val=>{
+      const b2 = el('button','choice-btn', String(val));
+      b2.onclick = ()=>{
+        if(!active||destroyed) return;
+        if(val===redCount){ b2.classList.add('correct'); api.correct(200,null); } else { b2.classList.add('wrong'); api.wrong(); }
+        setTimeout(()=>api.finishRound(true), 500);
+      };
+      choicesBox.appendChild(b2);
+    });
+  }
+  flashBackground();
+  next();
+  return {
+    pause(){ active=false; flashDelay&&flashDelay.pause(); }, resume(){ active=true; flashDelay&&flashDelay.resume(); }, restart(){},
+    hint(){ return false; },
+    skip(){ round++; next(); },
+    destroy(){ destroyed=true; active=false; flashDelay&&flashDelay.clear(); document.body.style.boxShadow=''; }
+  };
+}};
+
+/* =========================================================
+   BRAINSPARK ENGINE — PART 17: BOOTSTRAP / INIT
+========================================================= */
+function applySettingsToDOM(){
+  document.documentElement.setAttribute('data-theme', State.settings.theme);
+  document.body.classList.toggle('no-anim', !State.settings.animations);
+}
+function unlockAudioOnce(){
+  Audio1.resume();
+  if(State.profile.name) Audio1.startMusic();
+  document.removeEventListener('pointerdown', unlockAudioOnce);
+}
+function initApp(){
+  try{ applySettingsToDOM(); }catch(e){ console.error('settings apply failed', e); }
+  try{ BgFX.init(); }catch(e){ console.error('background fx failed', e); }
+  try{ ensureWeeklyMonthly(); }catch(e){ console.error('weekly/monthly init failed', e); }
+  document.addEventListener('pointerdown', unlockAudioOnce, {once:true});
+  try{ showScreen('homeScreen', {replace:true}); }catch(e){ console.error('home render failed', e); }
+  if(State.profile.name){ try{ checkAndPopAchievements(); }catch(e){ console.error('achievement check failed', e); } }
+  window.addEventListener('beforeunload', ()=>{ try{ saveProfile(); saveSettings(); }catch(e){} });
+  setTimeout(()=>{
+    const loader = document.getElementById('loaderWrap');
+    if(loader){ loader.style.opacity='0'; setTimeout(()=>loader.remove(), 500); }
+  }, 550);
+  console.log('BrainSpark ready.');
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+</script>
+</body>
+</html>
