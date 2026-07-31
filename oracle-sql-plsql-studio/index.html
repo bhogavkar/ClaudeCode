@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Oracle SQL &amp; PL/SQL Formatter, Comparator &amp; Merge Studio</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23e63946'/%3E%3Ctext x='12' y='17' font-size='13' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3ESQL%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ================= ICON SPRITE ================= -->
+<svg style="display:none">
+  <defs>
+    <symbol id="ic-logo" viewBox="0 0 24 24"><path d="M4 6c0-1.1 3.6-2 8-2s8 .9 8 2-3.6 2-8 2-8-.9-8-2Z"/><path d="M4 6v12c0 1.1 3.6 2 8 2s8-.9 8-2V6"/><path d="M4 12c0 1.1 3.6 2 8 2s8-.9 8-2"/></symbol>
+    <symbol id="ic-file" viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z"/><path d="M15 2v5h5"/></symbol>
+    <symbol id="ic-folder" viewBox="0 0 24 24"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6Z"/></symbol>
+    <symbol id="ic-upload" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="ic-save" viewBox="0 0 24 24"><path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z"/><path d="M8 3v6h8V3"/><path d="M7 21v-7h10v7"/></symbol>
+    <symbol id="ic-download" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></symbol>
+    <symbol id="ic-format" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h16M17 9v9M14 15l3 3 3-3"/></symbol>
+    <symbol id="ic-compare" viewBox="0 0 24 24"><path d="M8 3v18M16 3v18"/><path d="M3 8l5-5v10ZM21 16l-5 5V11Z"/></symbol>
+    <symbol id="ic-merge" viewBox="0 0 24 24"><path d="M7 3v8a4 4 0 0 0 4 4h2a4 4 0 0 0 4-4V3"/><circle cx="7" cy="19" r="2"/><circle cx="17" cy="19" r="2"/><path d="M7 15v2M17 15v2"/></symbol>
+    <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+    <symbol id="ic-replace" viewBox="0 0 24 24"><path d="M4 7h13l-3-3M20 17H7l3 3"/></symbol>
+    <symbol id="ic-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+    <symbol id="ic-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></symbol>
+    <symbol id="ic-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="ic-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="ic-undo" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-6M4 12V6M4 12h6"/></symbol>
+    <symbol id="ic-redo" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 0-2.6 6M20 12v6M20 12h-6"/></symbol>
+    <symbol id="ic-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+    <symbol id="ic-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="ic-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></symbol>
+    <symbol id="ic-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+    <symbol id="ic-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="ic-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+    <symbol id="ic-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+    <symbol id="ic-tree" viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="6" cy="19" r="2"/><path d="M8 5h4a2 2 0 0 1 2 2v0M8 12h8M8 19h6a2 2 0 0 0 2-2v0"/></symbol>
+    <symbol id="ic-warning" viewBox="0 0 24 24"><path d="M12 3 2 20h20L12 3Z"/><path d="M12 10v4M12 17h.01"/></symbol>
+    <symbol id="ic-bug" viewBox="0 0 24 24"><rect x="7" y="8" width="10" height="11" rx="4"/><path d="M12 8V5M9 5 7 3M15 5l2-2M4 12H2M22 12h-2M4 18l-2 2M20 18l2 2M9 12H7M17 12h-2"/></symbol>
+    <symbol id="ic-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></symbol>
+    <symbol id="ic-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="ic-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+    <symbol id="ic-cube" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7Z"/><path d="M3 7l9 5 9-5M12 12v10"/></symbol>
+    <symbol id="ic-func" viewBox="0 0 24 24"><path d="M17 4c-4 0-4 3-4.5 7L11 19c-.6 3-2 3-3 2M9 11h7"/></symbol>
+    <symbol id="ic-cursor" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-2 6Z"/></symbol>
+    <symbol id="ic-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+    <symbol id="ic-align" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></symbol>
+    <symbol id="ic-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></symbol>
+    <symbol id="ic-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r=".5"/></symbol>
+    <symbol id="ic-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M4 20h16"/></symbol>
+    <symbol id="ic-clip" viewBox="0 0 24 24"><path d="M9 4h6v3H9zM7 6h10a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="ic-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M14 9l2 2"/></symbol>
+  </defs>
+</svg>
+
+<div id="app" class="app">
+
+  <!-- ================= TOP TOOLBAR ================= -->
+  <header class="toolbar" role="banner">
+    <div class="toolbar-brand">
+      <svg class="icon icon-brand"><use href="#ic-logo"/></svg>
+      <span class="brand-title">Oracle SQL &amp; PL/SQL Studio</span>
+    </div>
+
+    <div class="toolbar-group">
+      <button class="tbtn" id="btnNewFile" title="New File" data-tip="New (blank buffer)"><svg class="icon"><use href="#ic-plus"/></svg><span>New</span></button>
+      <button class="tbtn" id="btnOpenFile" title="Open File(s)"><svg class="icon"><use href="#ic-upload"/></svg><span>Open</span></button>
+      <input type="file" id="fileInput" multiple accept=".sql,.pkb,.pks,.pkg,.txt,.xml,.json,.log" hidden>
+      <button class="tbtn" id="btnSave" title="Save (Ctrl+S)"><svg class="icon"><use href="#ic-save"/></svg><span>Save</span></button>
+      <button class="tbtn" id="btnDownload" title="Download (Ctrl+Shift+S)"><svg class="icon"><use href="#ic-download"/></svg><span>Export</span></button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group">
+      <button class="tbtn tbtn-primary" id="btnFormat" title="Beautify (Ctrl+B)"><svg class="icon"><use href="#ic-format"/></svg><span>Format</span></button>
+      <select id="styleSelect" class="tselect" title="Formatting Style">
+        <option value="classic">Classic Oracle</option>
+        <option value="enterprise" selected>Enterprise Oracle</option>
+        <option value="compact">Compact</option>
+        <option value="minimal">Minimal</option>
+        <option value="modern">Modern</option>
+        <option value="custom">Developer Custom</option>
+      </select>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group" id="modeSwitch" role="tablist">
+      <button class="tbtn mode-btn active" data-mode="editor" title="Editor"><svg class="icon"><use href="#ic-file"/></svg><span>Editor</span></button>
+      <button class="tbtn mode-btn" data-mode="compare" title="Compare (Ctrl+Shift+B)"><svg class="icon"><use href="#ic-compare"/></svg><span>Compare</span></button>
+      <button class="tbtn mode-btn" data-mode="merge" title="Merge (Ctrl+M)"><svg class="icon"><use href="#ic-merge"/></svg><span>Merge</span></button>
+    </div>
+
+    <div class="toolbar-sep"></div>
+
+    <div class="toolbar-group">
+      <button class="tbtn" id="btnSearch" title="Find (Ctrl+F)"><svg class="icon"><use href="#ic-search"/></svg></button>
+      <button class="tbtn" id="btnReplace" title="Replace (Ctrl+H)"><svg class="icon"><use href="#ic-replace"/></svg></button>
+      <button class="tbtn" id="btnStats" title="Statistics Panel"><svg class="icon"><use href="#ic-chart"/></svg></button>
+      <button class="tbtn" id="btnQuality" title="Code Quality &amp; Performance Analyzer"><svg class="icon"><use href="#ic-bug"/></svg></button>
+      <button class="tbtn" id="btnEbsMode" title="Toggle Oracle EBS Smart Mode"><svg class="icon"><use href="#ic-key"/></svg><span>EBS</span></button>
+    </div>
+
+    <div class="toolbar-spacer"></div>
+
+    <div class="toolbar-group">
+      <button class="tbtn icon-only" id="btnTheme" title="Toggle Theme"><svg class="icon"><use href="#ic-moon"/></svg></button>
+      <button class="tbtn icon-only" id="btnSettings" title="Settings"><svg class="icon"><use href="#ic-settings"/></svg></button>
+      <button class="tbtn icon-only" id="btnHelp" title="Keyboard Shortcuts &amp; Help">?</button>
+    </div>
+  </header>
+
+  <!-- ================= TAB BAR ================= -->
+  <div class="tabbar" id="tabbar" role="tablist" aria-label="Open files"></div>
+
+  <!-- ================= BODY ================= -->
+  <div class="workspace">
+
+    <!-- LEFT SIDEBAR: Outline Navigator -->
+    <aside class="sidebar" id="sidebarLeft">
+      <div class="sidebar-header">
+        <svg class="icon"><use href="#ic-tree"/></svg><span>Outline Navigator</span>
+        <button class="icon-btn sidebar-collapse" data-target="sidebarLeft" title="Collapse"><svg class="icon"><use href="#ic-arrow-left"/></svg></button>
+      </div>
+      <div class="sidebar-search">
+        <input type="text" id="outlineFilter" placeholder="Filter objects...">
+      </div>
+      <div class="sidebar-body" id="outlineTree">
+        <div class="empty-hint">No objects detected yet. Start typing or open a file.</div>
+      </div>
+      <div class="sidebar-footer" id="ebsBadgeArea"></div>
+    </aside>
+
+    <div class="splitter splitter-v" id="splitLeft" title="Drag to resize"></div>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="content">
+
+      <!-- Find/Replace bar -->
+      <div class="findbar" id="findbar" hidden>
+        <svg class="icon"><use href="#ic-search"/></svg>
+        <input type="text" id="findInput" placeholder="Find">
+        <span class="find-count" id="findCount">0/0</span>
+        <button class="icon-btn" id="findPrev" title="Previous match"><svg class="icon"><use href="#ic-arrow-up"/></svg></button>
+        <button class="icon-btn" id="findNext" title="Next match"><svg class="icon"><use href="#ic-arrow-down"/></svg></button>
+        <div class="findbar-sep"></div>
+        <input type="text" id="replaceInput" placeholder="Replace" hidden>
+        <button class="tbtn tbtn-sm" id="replaceOne" hidden>Replace</button>
+        <button class="tbtn tbtn-sm" id="replaceAll" hidden>Replace All</button>
+        <div class="findbar-sep"></div>
+        <label class="toggle-chip"><input type="checkbox" id="optRegex"><span>.*</span></label>
+        <label class="toggle-chip"><input type="checkbox" id="optWholeWord"><span>Ab</span></label>
+        <label class="toggle-chip"><input type="checkbox" id="optCaseSensitive"><span>Aa</span></label>
+        <div class="toolbar-spacer"></div>
+        <button class="icon-btn" id="findbarClose" title="Close (Esc)"><svg class="icon"><use href="#ic-close"/></svg></button>
+      </div>
+
+      <!-- EDITOR VIEW -->
+      <section class="view" id="view-editor" data-view="editor">
+        <div class="editor-pane" id="editorPane"></div>
+      </section>
+
+      <!-- COMPARE VIEW -->
+      <section class="view" id="view-compare" data-view="compare" hidden>
+        <div class="compare-toolbar">
+          <div class="toolbar-group">
+            <button class="tbtn tbtn-sm" id="btnCompareRun"><svg class="icon"><use href="#ic-compare"/></svg><span>Run Compare</span></button>
+            <button class="tbtn tbtn-sm icon-only" id="btnCompareSwap" title="Swap sides"><svg class="icon"><use href="#ic-redo"/></svg></button>
+          </div>
+          <div class="toolbar-group">
+            <label class="toggle-chip"><input type="checkbox" id="cmpIgnoreWhitespace" checked><span>Ignore Whitespace</span></label>
+            <label class="toggle-chip"><input type="checkbox" id="cmpIgnoreCase" checked><span>Ignore Case</span></label>
+            <label class="toggle-chip"><input type="checkbox" id="cmpIgnoreComments"><span>Ignore Comments</span></label>
+            <label class="toggle-chip"><input type="checkbox" id="cmpSmartEbs"><span>Smart EBS Compare</span></label>
+          </div>
+          <div class="toolbar-group">
+            <button class="tbtn tbtn-sm" id="cmpViewSideBySide" data-cmpview="side">Side-by-Side</button>
+            <button class="tbtn tbtn-sm" id="cmpViewInline" data-cmpview="inline">Inline</button>
+          </div>
+          <div class="toolbar-group">
+            <button class="icon-btn" id="diffPrev" title="Previous difference"><svg class="icon"><use href="#ic-arrow-up"/></svg></button>
+            <span class="find-count" id="diffCount">0/0</span>
+            <button class="icon-btn" id="diffNext" title="Next difference"><svg class="icon"><use href="#ic-arrow-down"/></svg></button>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <div class="diff-legend">
+            <span class="legend-chip legend-add">Added</span>
+            <span class="legend-chip legend-del">Removed</span>
+            <span class="legend-chip legend-mod">Modified</span>
+            <span class="legend-chip legend-ws">Whitespace</span>
+          </div>
+        </div>
+        <div id="compareBanner"></div>
+        <div class="compare-body" id="compareBody">
+          <div class="compare-col" id="compareLeftCol">
+            <div class="compare-col-header">
+              <span>Left: <b id="cmpLeftName">Left.sql</b></span>
+              <select class="tselect tselect-sm" id="cmpLeftSource"></select>
+            </div>
+            <div class="compare-editor" id="compareLeftEditor"></div>
+          </div>
+          <div class="compare-col" id="compareRightCol">
+            <div class="compare-col-header">
+              <span>Right: <b id="cmpRightName">Right.sql</b></span>
+              <select class="tselect tselect-sm" id="cmpRightSource"></select>
+            </div>
+            <div class="compare-editor" id="compareRightEditor"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MERGE VIEW -->
+      <section class="view" id="view-merge" data-view="merge" hidden>
+        <div class="merge-toolbar">
+          <div class="toolbar-group">
+            <button class="tbtn tbtn-sm" id="mergeRun"><svg class="icon"><use href="#ic-merge"/></svg><span>Detect Conflicts</span></button>
+            <button class="tbtn tbtn-sm" id="mergeAll">Merge All (Smart)</button>
+          </div>
+          <div class="toolbar-group">
+            <button class="icon-btn" id="mergeUndo" title="Undo (Ctrl+Z)"><svg class="icon"><use href="#ic-undo"/></svg></button>
+            <button class="icon-btn" id="mergeRedo" title="Redo (Ctrl+Y)"><svg class="icon"><use href="#ic-redo"/></svg></button>
+          </div>
+          <div class="toolbar-group">
+            <span class="find-count" id="conflictCount">0 conflicts</span>
+            <button class="icon-btn" id="conflictPrev" title="Previous conflict"><svg class="icon"><use href="#ic-arrow-up"/></svg></button>
+            <button class="icon-btn" id="conflictNext" title="Next conflict"><svg class="icon"><use href="#ic-arrow-down"/></svg></button>
+          </div>
+          <div class="toolbar-group">
+            <button class="tbtn tbtn-sm" id="takeLeft">Take Left</button>
+            <button class="tbtn tbtn-sm" id="takeRight">Take Right</button>
+            <button class="tbtn tbtn-sm" id="takeBoth">Take Both</button>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <div class="toolbar-group">
+            <button class="tbtn tbtn-sm" id="mergePreview">Preview</button>
+            <button class="tbtn tbtn-sm tbtn-primary" id="mergeDownload"><svg class="icon"><use href="#ic-download"/></svg><span>Download Merged</span></button>
+          </div>
+        </div>
+        <div class="merge-body">
+          <div class="merge-col">
+            <div class="compare-col-header"><span>Source A (Left)</span></div>
+            <div class="merge-editor" id="mergeLeftEditor"></div>
+          </div>
+          <div class="merge-col merge-col-center">
+            <div class="compare-col-header"><span>Merged Result</span></div>
+            <div class="merge-editor" id="mergeResultEditor"></div>
+          </div>
+          <div class="merge-col">
+            <div class="compare-col-header"><span>Source B (Right)</span></div>
+            <div class="merge-editor" id="mergeRightEditor"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <div class="splitter splitter-v" id="splitRight" title="Drag to resize"></div>
+
+    <!-- RIGHT SIDEBAR: Stats / Quality -->
+    <aside class="sidebar sidebar-right" id="sidebarRight">
+      <div class="sidebar-header">
+        <svg class="icon"><use href="#ic-chart"/></svg><span>Insights</span>
+        <button class="icon-btn sidebar-collapse" data-target="sidebarRight" title="Collapse"><svg class="icon"><use href="#ic-arrow-right"/></svg></button>
+      </div>
+      <div class="insight-tabs">
+        <button class="insight-tab active" data-panel="stats">Statistics</button>
+        <button class="insight-tab" data-panel="quality">Quality</button>
+        <button class="insight-tab" data-panel="perf">Performance</button>
+      </div>
+      <div class="sidebar-body">
+        <div class="insight-panel" id="panel-stats"></div>
+        <div class="insight-panel" id="panel-quality" hidden></div>
+        <div class="insight-panel" id="panel-perf" hidden></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ================= STATUS BAR ================= -->
+  <footer class="statusbar">
+    <span id="statCursor">Ln 1, Col 1</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statSel">0 selected</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statLines">0 lines</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statFileType">SQL</span>
+    <div class="toolbar-spacer"></div>
+    <span id="statEbs" class="status-badge" hidden>EBS Smart Mode</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statMessage">Ready.</span>
+    <span class="statusbar-sep">|</span>
+    <span id="statStyle">Enterprise Oracle</span>
+  </footer>
+
+  <!-- ================= DRAG OVERLAY ================= -->
+  <div class="drop-overlay" id="dropOverlay" hidden>
+    <div class="drop-message"><svg class="icon icon-xl"><use href="#ic-upload"/></svg><p>Drop .sql, .pkb, .pks, .pkg, .txt, .xml, .json or .log files</p></div>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+  <div class="modal-backdrop" id="modalBackdrop" hidden></div>
+
+  <div class="modal" id="modalSettings" hidden>
+    <div class="modal-header"><span>Settings</span><button class="icon-btn modal-close"><svg class="icon"><use href="#ic-close"/></svg></button></div>
+    <div class="modal-body">
+      <div class="settings-grid">
+        <label>Theme</label>
+        <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
+
+        <label>Default Style</label>
+        <select id="setStyle">
+          <option value="classic">Classic Oracle</option>
+          <option value="enterprise">Enterprise Oracle</option>
+          <option value="compact">Compact</option>
+          <option value="minimal">Minimal</option>
+          <option value="modern">Modern</option>
+          <option value="custom">Developer Custom</option>
+        </select>
+
+        <label>Indent Size</label>
+        <input type="number" id="setIndent" min="2" max="8" value="2">
+
+        <label>Font Size</label>
+        <input type="number" id="setFontSize" min="10" max="24" value="14">
+
+        <label>Uppercase Keywords</label>
+        <input type="checkbox" id="setUppercase" checked>
+
+        <label>Align Columns/Conditions</label>
+        <input type="checkbox" id="setAlign" checked>
+
+        <label>Comma Style</label>
+        <select id="setCommaStyle"><option value="trailing">Trailing (col,)</option><option value="leading">Leading (,col)</option></select>
+
+        <label>Blank Line Collapse</label>
+        <input type="checkbox" id="setCollapseBlank" checked>
+
+        <label>Word Wrap</label>
+        <input type="checkbox" id="setWordWrap">
+
+        <label>Auto-Save</label>
+        <input type="checkbox" id="setAutoSave" checked>
+
+        <label>Oracle EBS Smart Mode</label>
+        <input type="checkbox" id="setEbsMode">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="tbtn" id="settingsReset">Reset to Defaults</button>
+      <button class="tbtn tbtn-primary" id="settingsSave">Save</button>
+    </div>
+  </div>
+
+  <div class="modal" id="modalExport" hidden>
+    <div class="modal-header"><span>Export</span><button class="icon-btn modal-close"><svg class="icon"><use href="#ic-close"/></svg></button></div>
+    <div class="modal-body">
+      <p class="modal-hint">Choose an export format for the active buffer.</p>
+      <div class="export-grid">
+        <button class="export-opt" data-fmt="sql"><svg class="icon"><use href="#ic-file"/></svg>SQL (.sql)</button>
+        <button class="export-opt" data-fmt="txt"><svg class="icon"><use href="#ic-file"/></svg>Text (.txt)</button>
+        <button class="export-opt" data-fmt="html"><svg class="icon"><use href="#ic-file"/></svg>HTML (.html)</button>
+        <button class="export-opt" data-fmt="md"><svg class="icon"><use href="#ic-file"/></svg>Markdown (.md)</button>
+        <button class="export-opt" data-fmt="pdf"><svg class="icon"><use href="#ic-file"/></svg>PDF (Print)</button>
+        <button class="export-opt" data-fmt="clipboard"><svg class="icon"><use href="#ic-copy"/></svg>Copy to Clipboard</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal modal-help" id="modalHelp" hidden>
+    <div class="modal-header"><span>Keyboard Shortcuts &amp; Help</span><button class="icon-btn modal-close"><svg class="icon"><use href="#ic-close"/></svg></button></div>
+    <div class="modal-body">
+      <table class="shortcuts-table">
+        <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Beautify / Format</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td>Open Compare</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>M</kbd></td><td>Open Merge</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Find</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>H</kbd></td><td>Replace</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>/</kbd></td><td>Toggle Comment</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Save (autosave to browser)</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd></td><td>Download / Export</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd></td><td>Undo / Redo</td></tr>
+        <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Indent / Outdent selection</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close panel / dialog</td></tr>
+      </table>
+      <p class="modal-hint">Built entirely with HTML5, CSS3 and vanilla JavaScript. No server, no build step &mdash; just open <code>index.html</code>.</p>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
