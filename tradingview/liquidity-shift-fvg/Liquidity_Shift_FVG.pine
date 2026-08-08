@@ -1,0 +1,1353 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  LIQUIDITY SHIFT + FAIR VALUE GAP  [ICT / SMART MONEY CONCEPTS]
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  Detects Fair Value Gaps that form in the context of a liquidity event (a sweep of a
+//  swing high/low, equal highs/lows, or a prior session/day/week extreme) followed by a
+//  Market Structure Shift and displacement. FVGs are scored 0-100 on how strongly they are
+//  tied to that liquidity context, so the same 3-candle imbalance is treated very
+//  differently depending on what happened before it formed.
+//
+//  Pipeline:  LIQUIDITY -> SWEEP -> STRUCTURE SHIFT (MSS) -> DISPLACEMENT -> FVG -> RETEST
+//
+//  Non-repainting design: every array mutation, drawing creation, state transition and
+//  alert fires only inside `barstate.isconfirmed` blocks (see the "CONFIRMED-BAR GATE"
+//  comments throughout). Higher-timeframe data is pulled with `barmerge.lookahead_off` and
+//  an extra historical offset so only fully-closed HTF bars are ever used. An optional
+//  "developing" preview (dashed, unconfirmed) is clearly separated from confirmed objects.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//@version=6
+indicator("Liquidity Shift + FVG [ICT/SMC]", shorttitle = "LiqShift+FVG", overlay = true,
+     max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  INPUT GROUP LABELS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+var string GA = "A. General"
+var string GB = "B. Fair Value Gap Settings"
+var string GC = "C. Liquidity Settings"
+var string GD = "D. Market Structure Shift (MSS)"
+var string GE = "E. Displacement Settings"
+var string GF = "F. Multi-Timeframe Analysis"
+var string GG = "G. Quality Score"
+var string GH = "H. Mitigation && Invalidation"
+var string GI = "I. Alerts"
+var string GJ = "J. Visual Settings"
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  A. GENERAL
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_showDeveloping   = input.bool(true,  "Show real-time developing FVG (unconfirmed preview)", group = GA,
+     tooltip = "Draws a dashed preview of a forming 3-candle gap before the candle closes. The preview never feeds scores, alerts or history -- only the confirmed box does.")
+i_maxActiveFVG     = input.int(30, "Max active FVGs tracked per side", minval = 5, maxval = 60, group = GA)
+i_maxHistFVG       = input.int(80, "Max historical FVGs stored (total)", minval = 10, maxval = 120, group = GA,
+     tooltip = "Hard-caps every FVG-related drawing object (box, label, midline). Kept well under TradingView's 500-per-type limit even with every other object category at its maximum.")
+i_maxLiqLevels     = input.int(15, "Max liquidity levels tracked per side", minval = 5, maxval = 30, group = GA)
+i_usePDFilter      = input.bool(false, "Prefer FVGs aligned with Premium/Discount", group = GA,
+     tooltip = "When enabled, bullish FVGs are only displayed if they sit in the discount half of the recent dealing range, and bearish FVGs only if they sit in the premium half.")
+i_pdRangeLen       = input.int(50, "Premium/Discount range lookback (bars)", minval = 10, maxval = 300, group = GA)
+i_pdEqBandPct      = input.float(10.0, "Equilibrium band width (% of range)", minval = 0.0, maxval = 40.0, step = 1.0, group = GA)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  B. FAIR VALUE GAP SETTINGS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_showBullFVG      = input.bool(true, "Show bullish FVGs", group = GB)
+i_showBearFVG      = input.bool(true, "Show bearish FVGs", group = GB)
+i_fvgMinATR        = input.float(0.0, "Min FVG size (x ATR, 0 = off)", minval = 0.0, step = 0.05, group = GB)
+i_fvgMinPct        = input.float(0.0, "Min FVG size (% of price, 0 = off)", minval = 0.0, step = 0.01, group = GB)
+i_extendBars       = input.int(20, "Extend mitigated/invalidated boxes by (bars)", minval = 0, maxval = 100, group = GB,
+     tooltip = "Active FVGs always extend live to the current bar. Once mitigated or invalidated, the box freezes this many bars past that event.")
+i_showCE           = input.bool(true, "Show FVG midline (consequent encroachment)", group = GB)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  C. LIQUIDITY SETTINGS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_liqSwingLen      = input.int(5, "Swing high/low sensitivity (bars left/right)", minval = 2, maxval = 30, group = GC,
+     tooltip = "Lower = more, smaller swings detected as liquidity. Higher = fewer, more significant swings.")
+i_useSwingHL       = input.bool(true,  "Use swing highs / swing lows", group = GC)
+i_useEqualHL       = input.bool(true,  "Use equal highs / equal lows", group = GC)
+i_eqTolPct         = input.float(12.0, "Equal high/low tolerance (% of ATR)", minval = 1.0, maxval = 100.0, group = GC)
+i_usePDHL          = input.bool(true,  "Use previous day high/low", group = GC)
+i_usePWHL          = input.bool(true,  "Use previous week high/low", group = GC)
+i_usePrevSession   = input.bool(true,  "Use previous session high/low", group = GC)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  D. MARKET STRUCTURE SHIFT (MSS)
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_mssSwingLen      = input.int(5, "Structure swing sensitivity (bars left/right)", minval = 2, maxval = 30, group = GD,
+     tooltip = "Swing length used to define the 'meaningful recent swing' that must be broken for a valid MSS.")
+i_mssMaxBars       = input.int(25, "Max bars after sweep for MSS to confirm", minval = 3, maxval = 200, group = GD)
+i_seqExpireBars    = input.int(60, "Liquidity-shift sequence expiry (bars)", minval = 5, maxval = 300, group = GD,
+     tooltip = "If no MSS confirms within this many bars of a sweep, the pending liquidity-shift sequence is discarded.")
+i_rejectionCLV     = input.float(0.55, "Min rejection strength for 'strong rejection' (0-1 close location)", minval = 0.0, maxval = 1.0, step = 0.05, group = GD)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  E. DISPLACEMENT SETTINGS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_dispMethod       = input.string("ATR Multiple", "Displacement method", options = ["ATR Multiple", "Body Percent", "Either"], group = GE)
+i_dispATRLen       = input.int(14, "ATR length", minval = 1, maxval = 100, group = GE)
+i_dispATRMult      = input.float(1.5, "Min displacement body (x ATR)", minval = 0.5, maxval = 5.0, step = 0.5, group = GE,
+     tooltip = "0.5 / 1.0 / 1.5 / 2.0 / 2.5 ATR are the typical range.")
+i_dispBodyPct      = input.float(60.0, "Min body % of candle range", minval = 10.0, maxval = 95.0, step = 5.0, group = GE)
+i_dispConsecutive  = input.int(1, "Consecutive same-direction candles required", minval = 1, maxval = 5, group = GE)
+i_dispUseVolume    = input.bool(false, "Require volume confirmation", group = GE,
+     tooltip = "Disable on symbols without reliable volume (many FX/CFD/index feeds).")
+i_dispVolMult      = input.float(1.5, "Volume multiple vs average", minval = 1.0, maxval = 5.0, step = 0.1, group = GE)
+i_dispVolLen       = input.int(20, "Volume average length", minval = 5, maxval = 100, group = GE)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  F. MULTI-TIMEFRAME ANALYSIS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_htfMode          = input.string("OFF", "Higher timeframe FVG / bias", options = ["OFF", "15m", "30m", "1H", "4H", "1D", "Custom"], group = GF)
+i_htfCustom        = input.timeframe("240", "Custom timeframe (used when mode = Custom)", group = GF)
+i_showHTFFVG       = input.bool(true, "Draw higher-timeframe FVGs", group = GF)
+i_htfBiasLen       = input.int(50, "HTF bias EMA length", minval = 5, maxval = 200, group = GF)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  G. QUALITY SCORE
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_wSweep           = input.int(20, "Weight: liquidity sweep occurred before FVG", minval = 0, maxval = 100, group = GG)
+i_wMSS             = input.int(20, "Weight: MSS occurred before FVG", minval = 0, maxval = 100, group = GG)
+i_wDisp            = input.int(20, "Weight: strong displacement created FVG", minval = 0, maxval = 100, group = GG)
+i_wHTF             = input.int(15, "Weight: aligned with higher-timeframe direction", minval = 0, maxval = 100, group = GG)
+i_wSize            = input.int(10, "Weight: strong relative FVG size", minval = 0, maxval = 100, group = GG)
+i_wNearLiq         = input.int(10, "Weight: FVG occurs near important liquidity", minval = 0, maxval = 100, group = GG)
+i_wVolume          = input.int(5,  "Weight: volume confirmation", minval = 0, maxval = 100, group = GG)
+i_relSizeATRMult   = input.float(0.5, "Relative-size threshold (x ATR)", minval = 0.1, maxval = 3.0, step = 0.1, group = GG)
+i_nearLiqATRMult   = input.float(1.0, "Near-liquidity threshold (x ATR)", minval = 0.1, maxval = 5.0, step = 0.1, group = GG)
+i_vhqMin           = input.int(80, "Very High Quality minimum score", minval = 0, maxval = 100, group = GG)
+i_hqMin            = input.int(65, "High Quality minimum score", minval = 0, maxval = 100, group = GG)
+i_mqMin            = input.int(50, "Medium Quality minimum score", minval = 0, maxval = 100, group = GG)
+i_minScoreShow     = input.int(0,  "Minimum score to display an FVG at all", minval = 0, maxval = 100, group = GG)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  H. MITIGATION & INVALIDATION
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_mitigationDef    = input.string("First Touch", "Mitigation definition", options = ["First Touch", "50% Fill", "Full Fill"], group = GH)
+i_invalidateClose  = input.bool(true, "Invalidate FVG on confirmed close through far boundary", group = GH)
+i_fvgDisplay       = input.string("Keep All", "Historical FVG display", options = ["Keep All", "Hide Mitigated", "Hide Invalidated", "Active Only"], group = GH)
+i_hideAfterBars    = input.int(0, "Auto-hide mitigated FVGs after N bars (0 = never)", minval = 0, maxval = 2000, group = GH)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  I. ALERTS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_alertMinScore    = input.int(65, "Minimum score for 'High-Quality Setup' alerts", minval = 0, maxval = 100, group = GI)
+
+// ───────────────────────────────────────────────────────────────────────────────────────────
+//  J. VISUAL SETTINGS
+// ───────────────────────────────────────────────────────────────────────────────────────────
+i_showFVG          = input.bool(true, "Show FVGs", group = GJ)
+i_showLiquidity    = input.bool(true, "Show liquidity levels", group = GJ)
+i_showSweeps       = input.bool(true, "Show sweep markers", group = GJ)
+i_showMSS          = input.bool(true, "Show MSS labels", group = GJ)
+i_showDisplacement = input.bool(true, "Show displacement markers", group = GJ)
+i_showPremDisc     = input.bool(false, "Show Premium/Discount range", group = GJ)
+i_showTargets      = input.bool(true, "Show liquidity targets for high-quality setups", group = GJ)
+i_showScoreLabel   = input.bool(true, "Show quality score on FVG label", group = GJ)
+i_showMitigation   = input.bool(true, "Show mitigation status on FVG label", group = GJ)
+i_showDashboard    = input.bool(true, "Show dashboard", group = GJ)
+i_dashPosition     = input.string("Top Right", "Dashboard position", options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = GJ)
+i_colorBullFVG     = input.color(color.new(#2196F3, 75), "Bullish FVG color", group = GJ)
+i_colorBearFVG     = input.color(color.new(#FF7043, 75), "Bearish FVG color", group = GJ)
+i_colorHTF         = input.color(color.new(#9C27B0, 70), "HTF FVG color", group = GJ)
+i_colorBuySide     = input.color(color.new(#EF5350, 0), "Buy-side liquidity color", group = GJ)
+i_colorSellSide    = input.color(color.new(#26A69A, 0), "Sell-side liquidity color", group = GJ)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  USER-DEFINED TYPES
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// A single Fair Value Gap and everything known about it.
+type FVG
+    int    barIndex          // bar index of candle 3 (the confirmation/formation bar)
+    int    formationTime
+    bool   bullish
+    float  upper
+    float  lower
+    float  sizeAbs
+    float  sizePct
+    string formationTF
+    bool   isHTF
+    bool   sweepBefore
+    bool   mssBefore
+    bool   dispBefore
+    bool   htfAligned
+    bool   strongSize
+    bool   nearLiquidity
+    bool   volConfirmed
+    int    score
+    string qualityLabel
+    string classification
+    bool   touchedFirst
+    bool   filled50
+    bool   filledFull
+    bool   invalidated
+    string state
+    bool   isMitigated
+    int    mitigatedBar
+    box    zoneBox
+    label  infoLabel
+    line   ceLine
+
+// A resting liquidity pool (swing high/low, equal high/low, PDH/PDL, PWH/PWL, prev session H/L).
+type LiqLevel
+    float  price
+    int    barIndex
+    string kind
+    bool   buySide          // true = buy-side liquidity (resting above price, from highs)
+    bool   swept
+    line   ln
+    label  lb
+
+// Tracks a pending liquidity-shift sequence (sweep -> MSS -> displacement) for one direction.
+type Sequence
+    bool   active
+    int    sweepBar
+    float  sweepLevel
+    float  sweepExtreme       // the actual wick extreme (low/high) of the sweep bar, for SL reference
+    string sweepKind
+    float  rejectionCLV
+    bool   dispAtSweep
+    bool   mssConfirmed
+    int    mssBar
+    float  structureRef
+    bool   dispConfirmed
+    int    dispBar
+    label  sweepLabel
+    label  mssLabel
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+var array<FVG>      g_fvgList     = array.new<FVG>()
+var array<LiqLevel> g_buySideLiq  = array.new<LiqLevel>()   // resting above price (from swing/equal highs)
+var array<LiqLevel> g_sellSideLiq = array.new<LiqLevel>()   // resting below price (from swing/equal lows)
+
+var Sequence g_bullSeq = Sequence.new(active = false, sweepBar = na, sweepLevel = na, sweepExtreme = na, sweepKind = "",
+     rejectionCLV = na, dispAtSweep = false, mssConfirmed = false, mssBar = na, structureRef = na,
+     dispConfirmed = false, dispBar = na, sweepLabel = na, mssLabel = na)
+var Sequence g_bearSeq = Sequence.new(active = false, sweepBar = na, sweepLevel = na, sweepExtreme = na, sweepKind = "",
+     rejectionCLV = na, dispAtSweep = false, mssConfirmed = false, mssBar = na, structureRef = na,
+     dispConfirmed = false, dispBar = na, sweepLabel = na, mssLabel = na)
+
+// Rolling day / week / session extremes, built only from the chart's own bars (no security() needed,
+// so these are available identically on every symbol/timeframe and are inherently non-repainting).
+var float curDayHigh  = na
+var float curDayLow   = na
+var LiqLevel g_pdHigh = LiqLevel.new(price = na, barIndex = na, kind = "PDH", buySide = true,  swept = false, ln = na, lb = na)
+var LiqLevel g_pdLow  = LiqLevel.new(price = na, barIndex = na, kind = "PDL", buySide = false, swept = false, ln = na, lb = na)
+
+var float curWeekHigh = na
+var float curWeekLow  = na
+var LiqLevel g_pwHigh = LiqLevel.new(price = na, barIndex = na, kind = "PWH", buySide = true,  swept = false, ln = na, lb = na)
+var LiqLevel g_pwLow  = LiqLevel.new(price = na, barIndex = na, kind = "PWL", buySide = false, swept = false, ln = na, lb = na)
+
+var float curSessHigh = na
+var float curSessLow  = na
+var LiqLevel g_psHigh = LiqLevel.new(price = na, barIndex = na, kind = "PSH", buySide = true,  swept = false, ln = na, lb = na)
+var LiqLevel g_psLow  = LiqLevel.new(price = na, barIndex = na, kind = "PSL", buySide = false, swept = false, ln = na, lb = na)
+
+// Most recent confirmed swing values used to seed liquidity pools (length = i_liqSwingLen).
+var float g_lastLiqSwingHigh    = na
+var int   g_lastLiqSwingHighBar = na
+var float g_lastLiqSwingLow     = na
+var int   g_lastLiqSwingLowBar  = na
+
+// Most recent confirmed structural swing values used for MSS (length = i_mssSwingLen, independent).
+var float g_structHigh    = na
+var int   g_structHighBar = na
+var float g_structLow     = na
+var int   g_structLowBar  = na
+
+// Consecutive same-direction candle counters (displacement confirmation).
+var int g_consecBull = 0
+var int g_consecBear = 0
+
+// Dashboard / summary state.
+var string g_structureBias  = "NEUTRAL"    // broad bias from swing structure (independent of MSS)
+var string g_lastMSSDir     = "NONE"       // last confirmed MSS direction, persists until flipped
+var string g_lastLiqEventTxt = "None yet"
+var int    g_lastLiqEventBar = na
+
+// Developing (unconfirmed) preview boxes -- purely visual, never used by any logic/alert/score.
+var box g_previewBullBox = na
+var box g_previewBearBox = na
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  GENERIC HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+f_fmt(x) =>
+    str.tostring(x, format.mintick)
+
+// Close-location-value: 0 = close printed at the bar's low, 1 = close printed at the bar's high.
+f_clv(h, l, c) =>
+    rng = h - l
+    rng > 0 ? (c - l) / rng : 0.5
+
+f_qualityLabel(score) =>
+    score >= i_vhqMin ? "VERY HIGH QUALITY" : score >= i_hqMin ? "HIGH QUALITY" : score >= i_mqMin ? "MEDIUM QUALITY" : "LOW QUALITY"
+
+f_deleteFVGObjects(f) =>
+    if not na(f.zoneBox)
+        box.delete(f.zoneBox)
+    if not na(f.infoLabel)
+        label.delete(f.infoLabel)
+    if not na(f.ceLine)
+        line.delete(f.ceLine)
+    true
+
+f_deleteLevelObjects(lvl) =>
+    if not na(lvl.ln)
+        line.delete(lvl.ln)
+    if not na(lvl.lb)
+        label.delete(lvl.lb)
+    true
+
+// Keeps g_fvgList bounded to i_maxHistFVG; drops the oldest entries first (drawings removed too).
+f_pruneFVGList() =>
+    while array.size(g_fvgList) > i_maxHistFVG
+        oldest = array.shift(g_fvgList)
+        f_deleteFVGObjects(oldest)
+    array.size(g_fvgList)
+
+// Keeps a liquidity array bounded to i_maxLiqLevels; drops the oldest entries first.
+f_pruneLiqArray(arr) =>
+    while array.size(arr) > i_maxLiqLevels
+        oldest = array.shift(arr)
+        f_deleteLevelObjects(oldest)
+    array.size(arr)
+
+// Counts active (bullish/bearish) FVGs and finds the best-scoring active one; runs on last bar only.
+// NOTE: `for x in arr` is used throughout this script instead of `for i = 0 to array.size(arr)-1`
+// so that empty arrays are always handled safely (zero iterations, no index arithmetic edge cases).
+f_countActive(bullish) =>
+    count = 0
+    for f in g_fvgList
+        if f.bullish == bullish and not f.isMitigated and not f.invalidated and not f.isHTF
+            count += 1
+    count
+
+f_bestActiveScore() =>
+    best = -1
+    bestDir = ""
+    for f in g_fvgList
+        if not f.isMitigated and not f.invalidated and not f.isHTF and f.score > best
+            best := f.score
+            bestDir := f.bullish ? "Bull" : "Bear"
+    [best, bestDir]
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  DISPLACEMENT DETECTION  (runs every bar; only ever consumed inside confirmed-bar blocks)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+atrVal    = ta.atr(i_dispATRLen)
+bodySize  = math.abs(close - open)
+rangeSize = high - low
+bodyPct   = rangeSize > 0 ? (bodySize / rangeSize) * 100.0 : 0.0
+isBullCandle = close > open
+isBearCandle = close < open
+
+if isBullCandle
+    g_consecBull := g_consecBull + 1
+    g_consecBear := 0
+else if isBearCandle
+    g_consecBear := g_consecBear + 1
+    g_consecBull := 0
+else
+    g_consecBull := 0
+    g_consecBear := 0
+
+dispByATR  = bodySize >= atrVal * i_dispATRMult
+dispByBody = bodyPct  >= i_dispBodyPct
+dispSizeOK = i_dispMethod == "ATR Multiple" ? dispByATR : i_dispMethod == "Body Percent" ? dispByBody : (dispByATR or dispByBody)
+
+volAvg = ta.sma(volume, i_dispVolLen)
+volOK  = not i_dispUseVolume or (volAvg > 0 and volume >= volAvg * i_dispVolMult)
+
+isDisplacementBull = dispSizeOK and isBullCandle and (g_consecBull >= i_dispConsecutive) and volOK
+isDisplacementBear = dispSizeOK and isBearCandle and (g_consecBear >= i_dispConsecutive) and volOK
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  LIQUIDITY POOL BUILDERS  (swing highs/lows + equal highs/lows)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// Creates a brand-new liquidity level (drawing + array entry), pruning the oldest if over the cap.
+f_addLevel(arr, price, barIdx, kind, isBuySide) =>
+    col = isBuySide ? i_colorBuySide : i_colorSellSide
+    ln = i_showLiquidity ? line.new(barIdx, price, bar_index, price, extend = extend.right,
+         color = color.new(col, 60), width = 1, style = line.style_dotted) : na
+    lb = i_showLiquidity ? label.new(bar_index, price, kind,
+         style = isBuySide ? label.style_label_down : label.style_label_up,
+         color = color.new(col, 100), textcolor = col, size = size.tiny) : na
+    lvl = LiqLevel.new(price = price, barIndex = barIdx, kind = kind, buySide = isBuySide, swept = false, ln = ln, lb = lb)
+    array.push(arr, lvl)
+    f_pruneLiqArray(arr)
+    true
+
+// Finds a nearby unswept level (within tolerance) and merges into it as "Equal Highs/Lows";
+// otherwise creates a fresh level. Equal highs/lows are the classic ICT multi-touch liquidity pool.
+f_upsertLevel(arr, price, barIdx, isBuySide, kindText) =>
+    tol = ta.atr(14) * (i_eqTolPct / 100.0)
+    LiqLevel foundLvl = na
+    for lvl in arr
+        if not lvl.swept and lvl.buySide == isBuySide and math.abs(lvl.price - price) <= tol
+            foundLvl := lvl
+            break
+    if not na(foundLvl)
+        f_deleteLevelObjects(foundLvl)
+        foundLvl.price := price
+        foundLvl.barIndex := barIdx
+        foundLvl.kind := kindText
+        col = isBuySide ? i_colorBuySide : i_colorSellSide
+        foundLvl.ln := i_showLiquidity ? line.new(foundLvl.barIndex, price, bar_index, price, extend = extend.right,
+             color = color.new(col, 35), width = 2, style = line.style_dotted) : na
+        foundLvl.lb := i_showLiquidity ? label.new(bar_index, price, kindText,
+             style = isBuySide ? label.style_label_down : label.style_label_up,
+             color = color.new(col, 100), textcolor = col, size = size.tiny) : na
+    else
+        f_addLevel(arr, price, barIdx, kindText, isBuySide)
+    true
+
+// Pivot detection for liquidity pools (independent sensitivity from the MSS structure pivots).
+liqPH = ta.pivothigh(i_liqSwingLen, i_liqSwingLen)
+liqPL = ta.pivotlow(i_liqSwingLen, i_liqSwingLen)
+
+if barstate.isconfirmed
+    if not na(liqPH)
+        pivotBar   = bar_index - i_liqSwingLen
+        tolEq      = ta.atr(14) * (i_eqTolPct / 100.0)
+        isEqual    = i_useEqualHL and not na(g_lastLiqSwingHigh) and math.abs(liqPH - g_lastLiqSwingHigh) <= tolEq
+        if isEqual
+            f_upsertLevel(g_buySideLiq, liqPH, pivotBar, true, "Equal Highs")
+        else if i_useSwingHL
+            f_addLevel(g_buySideLiq, liqPH, pivotBar, "Swing High", true)
+        g_lastLiqSwingHigh    := liqPH
+        g_lastLiqSwingHighBar := pivotBar
+
+    if not na(liqPL)
+        pivotBarL  = bar_index - i_liqSwingLen
+        tolEqL     = ta.atr(14) * (i_eqTolPct / 100.0)
+        isEqualL   = i_useEqualHL and not na(g_lastLiqSwingLow) and math.abs(liqPL - g_lastLiqSwingLow) <= tolEqL
+        if isEqualL
+            f_upsertLevel(g_sellSideLiq, liqPL, pivotBarL, false, "Equal Lows")
+        else if i_useSwingHL
+            f_addLevel(g_sellSideLiq, liqPL, pivotBarL, "Swing Low", false)
+        g_lastLiqSwingLow    := liqPL
+        g_lastLiqSwingLowBar := pivotBarL
+
+// Structural swing pivots used specifically for MSS (kept separate from the liquidity pivots above
+// so "swing sensitivity" for liquidity pools and "structure sensitivity" for MSS are independently tunable).
+structPH = ta.pivothigh(i_mssSwingLen, i_mssSwingLen)
+structPL = ta.pivotlow(i_mssSwingLen, i_mssSwingLen)
+
+if barstate.isconfirmed
+    if not na(structPH)
+        g_structHigh    := structPH
+        g_structHighBar := bar_index - i_mssSwingLen
+    if not na(structPL)
+        g_structLow     := structPL
+        g_structLowBar  := bar_index - i_mssSwingLen
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  DAY / WEEK / SESSION EXTREMES  (built from the chart's own bars -- no request.security())
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// Updates one of the six singleton daily/weekly/session levels in place (repositions the existing
+// line/label instead of recreating them every bar, except on an actual period rollover).
+f_updateDailyLevel(lvl, price, barIdx, isNewPeriod, showFlag) =>
+    if not na(price)
+        if isNewPeriod or na(lvl.ln)
+            f_deleteLevelObjects(lvl)
+            lvl.price    := price
+            lvl.barIndex := barIdx
+            lvl.swept    := false
+            col = lvl.buySide ? i_colorBuySide : i_colorSellSide
+            lvl.ln := showFlag ? line.new(barIdx, price, bar_index, price, extend = extend.right,
+                 color = color.new(col, 25), width = 1, style = line.style_dashed) : na
+            lvl.lb := showFlag ? label.new(bar_index, price, lvl.kind,
+                 style = lvl.buySide ? label.style_label_down : label.style_label_up,
+                 color = color.new(col, 100), textcolor = col, size = size.tiny) : na
+        else if showFlag and not na(lvl.lb)
+            // `extend.right` already keeps the line drawn to the edge of the chart, so only the
+            // label (which has no "extend") needs to be walked forward to the current bar.
+            label.set_x(lvl.lb, bar_index)
+    true
+
+newDay     = ta.change(time("D")) != 0
+newWeek    = ta.change(time("W")) != 0
+newSession = session.isfirstbar
+
+if newDay
+    g_pdHigh.price := curDayHigh
+    g_pdLow.price  := curDayLow
+    curDayHigh := high
+    curDayLow  := low
+else
+    curDayHigh := math.max(nz(curDayHigh, high), high)
+    curDayLow  := math.min(nz(curDayLow, low), low)
+
+if newWeek
+    g_pwHigh.price := curWeekHigh
+    g_pwLow.price  := curWeekLow
+    curWeekHigh := high
+    curWeekLow  := low
+else
+    curWeekHigh := math.max(nz(curWeekHigh, high), high)
+    curWeekLow  := math.min(nz(curWeekLow, low), low)
+
+if newSession
+    g_psHigh.price := curSessHigh
+    g_psLow.price  := curSessLow
+    curSessHigh := high
+    curSessLow  := low
+else
+    curSessHigh := math.max(nz(curSessHigh, high), high)
+    curSessLow  := math.min(nz(curSessLow, low), low)
+
+if barstate.isconfirmed
+    if i_usePDHL
+        f_updateDailyLevel(g_pdHigh, g_pdHigh.price, bar_index, newDay, i_showLiquidity)
+        f_updateDailyLevel(g_pdLow,  g_pdLow.price,  bar_index, newDay, i_showLiquidity)
+    if i_usePWHL
+        f_updateDailyLevel(g_pwHigh, g_pwHigh.price, bar_index, newWeek, i_showLiquidity)
+        f_updateDailyLevel(g_pwLow,  g_pwLow.price,  bar_index, newWeek, i_showLiquidity)
+    if i_usePrevSession
+        f_updateDailyLevel(g_psHigh, g_psHigh.price, bar_index, newSession, i_showLiquidity)
+        f_updateDailyLevel(g_psLow,  g_psLow.price,  bar_index, newSession, i_showLiquidity)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  LIQUIDITY SWEEP DETECTION  (A. simple break  B. sweep  C. sweep+rejection  D. sweep+displacement
+//  E. sweep+MSS -- E is written retroactively onto the marker once MSS confirms)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// Bounds the one-off "BULLISH/BEARISH MSS" confirmation labels so a long history with many
+// sweep-and-shift cycles cannot grow the label count without bound (section 20 performance limits).
+var array<label> g_mssConfirmLabels = array.new<label>()
+MSS_LABEL_CAP = 40
+
+f_addCappedMSSLabel(lbl) =>
+    array.push(g_mssConfirmLabels, lbl)
+    if array.size(g_mssConfirmLabels) > MSS_LABEL_CAP
+        label.delete(array.shift(g_mssConfirmLabels))
+    true
+
+// Evaluates ONE liquidity level for a sweep on the current confirmed bar and marks it consumed.
+// Returns [isSweep, clv]. isSweep is only true on a genuine wick-through-and-reclaim (not a
+// simple break, which still consumes the level but is not flagged as a sweep).
+f_evalSweep(lvl, isSellSide) =>
+    isSweep = false
+    clv = 0.5
+    if not na(lvl.price) and not lvl.swept
+        breached = isSellSide ? low < lvl.price : high > lvl.price
+        if breached
+            reclaimed = isSellSide ? close > lvl.price : close < lvl.price
+            lvl.swept := true
+            if reclaimed
+                isSweep := true
+                clvRaw = f_clv(high, low, close)
+                clv := isSellSide ? clvRaw : 1.0 - clvRaw     // normalized: higher = stronger rejection
+    [isSweep, clv]
+
+// Starts (or restarts) a liquidity-shift sequence following a confirmed sweep.
+f_registerSweep(seq, lvl, isSellSide, clv) =>
+    seq.active       := true
+    seq.sweepBar      := bar_index
+    seq.sweepLevel    := lvl.price
+    seq.sweepExtreme  := isSellSide ? low : high
+    seq.sweepKind     := lvl.kind
+    seq.rejectionCLV  := clv
+    dispNow            = isSellSide ? isDisplacementBull : isDisplacementBear
+    seq.dispAtSweep   := dispNow
+    seq.mssConfirmed  := false
+    seq.mssBar        := na
+    seq.structureRef  := isSellSide ? g_structHigh : g_structLow
+    seq.dispConfirmed := dispNow
+    seq.dispBar       := dispNow ? bar_index : na
+    if not na(seq.mssLabel)
+        label.delete(seq.mssLabel)
+    seq.mssLabel := na
+    strongRejection = clv >= i_rejectionCLV
+    classTxt = dispNow ? "SWEEP + DISP" : strongRejection ? "SWEEP + REJ" : "SWEEP"
+    col = isSellSide ? i_colorSellSide : i_colorBuySide
+    if not na(seq.sweepLabel)
+        label.delete(seq.sweepLabel)
+    seq.sweepLabel := i_showSweeps ? label.new(bar_index, isSellSide ? low : high, classTxt,
+         style = isSellSide ? label.style_label_up : label.style_label_down,
+         color = color.new(col, 15), textcolor = color.white, size = size.tiny,
+         tooltip = "Liquidity swept: " + lvl.kind + " @ " + f_fmt(lvl.price) +
+                   "\nRejection strength: " + str.tostring(clv * 100, "#") + "%") : na
+    true
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  MARKET STRUCTURE SHIFT + SEQUENCE PROGRESSION
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// Advances a pending sequence toward MSS/displacement confirmation, or expires it if stale.
+// Returns true exactly on the bar MSS confirms for this sequence (used to fire alerts once).
+f_advanceSequence(seq, isBullish) =>
+    mssJustNow = false
+    if seq.active
+        barsSince = bar_index - seq.sweepBar
+        if barsSince > i_seqExpireBars
+            seq.active := false
+        else
+            if not seq.mssConfirmed and not na(seq.structureRef) and barsSince <= i_mssMaxBars
+                brokeStructure = isBullish ? close > seq.structureRef : close < seq.structureRef
+                if brokeStructure
+                    seq.mssConfirmed := true
+                    seq.mssBar := bar_index
+                    mssJustNow := true
+                    g_lastMSSDir := isBullish ? "BULLISH" : "BEARISH"
+                    g_structureBias := isBullish ? "BULLISH" : "BEARISH"
+                    if i_showMSS
+                        mssLbl = label.new(bar_index, isBullish ? low : high, isBullish ? "BULLISH MSS" : "BEARISH MSS",
+                             style = isBullish ? label.style_label_up : label.style_label_down,
+                             color = color.new(isBullish ? i_colorSellSide : i_colorBuySide, 10),
+                             textcolor = color.white, size = size.small,
+                             tooltip = "Structure broken at " + f_fmt(seq.structureRef) +
+                                       "\nFollows " + seq.sweepKind + " sweep " + str.tostring(barsSince) + " bars ago")
+                        f_addCappedMSSLabel(mssLbl)
+                    if not na(seq.sweepLabel)
+                        label.set_text(seq.sweepLabel, "SWEEP + MSS")
+                        label.set_tooltip(seq.sweepLabel, "Liquidity swept: " + seq.sweepKind + " @ " + f_fmt(seq.sweepLevel) +
+                             "\n-> Market Structure Shift confirmed")
+            if not seq.dispConfirmed and barsSince <= i_mssMaxBars
+                dispNow = isBullish ? isDisplacementBull : isDisplacementBear
+                if dispNow
+                    seq.dispConfirmed := true
+                    seq.dispBar := bar_index
+    mssJustNow
+
+// Lightweight, always-on displacement markers (independent of any sweep/sequence context).
+var array<label> g_dispLabels = array.new<label>()
+DISP_LABEL_CAP = 40
+
+if barstate.isconfirmed and i_showDisplacement and (isDisplacementBull or isDisplacementBear)
+    dLbl = label.new(bar_index, isDisplacementBull ? low : high, "D",
+         style = isDisplacementBull ? label.style_label_up : label.style_label_down,
+         color = color.new(isDisplacementBull ? i_colorSellSide : i_colorBuySide, 55),
+         textcolor = color.white, size = size.tiny,
+         tooltip = "Displacement candle: body " + f_fmt(bodySize) + " (" + str.tostring(bodySize / atrVal, "#.##") + "x ATR, " +
+                   str.tostring(bodyPct, "#") + "% body)")
+    array.push(g_dispLabels, dLbl)
+    if array.size(g_dispLabels) > DISP_LABEL_CAP
+        label.delete(array.shift(g_dispLabels))
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  PER-BAR SWEEP / MSS EVENT PULSES  (consumed by the alert block later in the script)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+bullSweepEvent = false
+bearSweepEvent = false
+bullMSSEvent   = false
+bearMSSEvent   = false
+
+if barstate.isconfirmed
+    // --- Sell-side liquidity swept => bullish implication ---
+    for lvl in g_sellSideLiq
+        [isSweep, clv] = f_evalSweep(lvl, true)
+        if isSweep
+            f_registerSweep(g_bullSeq, lvl, true, clv)
+            bullSweepEvent := true
+    if i_usePDHL
+        [sw1, clv1] = f_evalSweep(g_pdLow, true)
+        if sw1
+            f_registerSweep(g_bullSeq, g_pdLow, true, clv1)
+            bullSweepEvent := true
+    if i_usePWHL
+        [sw2, clv2] = f_evalSweep(g_pwLow, true)
+        if sw2
+            f_registerSweep(g_bullSeq, g_pwLow, true, clv2)
+            bullSweepEvent := true
+    if i_usePrevSession
+        [sw3, clv3] = f_evalSweep(g_psLow, true)
+        if sw3
+            f_registerSweep(g_bullSeq, g_psLow, true, clv3)
+            bullSweepEvent := true
+
+    // --- Buy-side liquidity swept => bearish implication ---
+    for lvl in g_buySideLiq
+        [isSweepB, clvB] = f_evalSweep(lvl, false)
+        if isSweepB
+            f_registerSweep(g_bearSeq, lvl, false, clvB)
+            bearSweepEvent := true
+    if i_usePDHL
+        [sw4, clv4] = f_evalSweep(g_pdHigh, false)
+        if sw4
+            f_registerSweep(g_bearSeq, g_pdHigh, false, clv4)
+            bearSweepEvent := true
+    if i_usePWHL
+        [sw5, clv5] = f_evalSweep(g_pwHigh, false)
+        if sw5
+            f_registerSweep(g_bearSeq, g_pwHigh, false, clv5)
+            bearSweepEvent := true
+    if i_usePrevSession
+        [sw6, clv6] = f_evalSweep(g_psHigh, false)
+        if sw6
+            f_registerSweep(g_bearSeq, g_psHigh, false, clv6)
+            bearSweepEvent := true
+
+    bullMSSEvent := f_advanceSequence(g_bullSeq, true)
+    bearMSSEvent := f_advanceSequence(g_bearSeq, false)
+
+    if bullSweepEvent
+        g_lastLiqEventTxt := "Sell-side swept @ " + f_fmt(g_bullSeq.sweepLevel)
+        g_lastLiqEventBar := bar_index
+    if bearSweepEvent
+        g_lastLiqEventTxt := "Buy-side swept @ " + f_fmt(g_bearSeq.sweepLevel)
+        g_lastLiqEventBar := bar_index
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  HIGHER-TIMEFRAME BIAS  (confirmed-bar technique: close[1] / ema[1] = last CLOSED htf bar)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+htfTFRaw   = i_htfMode == "OFF" ? "" : i_htfMode == "15m" ? "15" : i_htfMode == "30m" ? "30" :
+     i_htfMode == "1H" ? "60" : i_htfMode == "4H" ? "240" : i_htfMode == "1D" ? "1D" : i_htfCustom
+htfEnabled = i_htfMode != "OFF"
+htfSafeTF  = htfEnabled ? htfTFRaw : timeframe.period
+htfValid   = htfEnabled and timeframe.in_seconds(htfSafeTF) > timeframe.in_seconds(timeframe.period)
+
+[htfCloseC, htfEmaC] = request.security(syminfo.tickerid, htfSafeTF, [close[1], ta.ema(close, i_htfBiasLen)[1]],
+     lookahead = barmerge.lookahead_off)
+
+htfBias = not htfValid ? 0 : htfCloseC > htfEmaC ? 1 : htfCloseC < htfEmaC ? -1 : 0
+htfBiasTxt = not htfValid ? "OFF" : htfBias > 0 ? "BULLISH" : htfBias < 0 ? "BEARISH" : "NEUTRAL"
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  REAL-TIME DEVELOPING FVG PREVIEW  (dashed, unconfirmed -- never feeds logic/alerts/history)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+if i_showDeveloping and not barstate.isconfirmed and i_showFVG
+    devBull = high[2] < low
+    devBear = low[2]  > high
+    if devBull
+        top = low
+        bot = high[2]
+        if na(g_previewBullBox)
+            g_previewBullBox := box.new(bar_index - 2, top, bar_index, bot, border_color = color.new(i_colorBullFVG, 30),
+                 border_style = line.style_dashed, bgcolor = color.new(i_colorBullFVG, 90), extend = extend.none)
+        else
+            box.set_top(g_previewBullBox, top)
+            box.set_bottom(g_previewBullBox, bot)
+            box.set_right(g_previewBullBox, bar_index)
+    else if not na(g_previewBullBox)
+        box.delete(g_previewBullBox)
+        g_previewBullBox := na
+    if devBear
+        top2 = low[2]
+        bot2 = high
+        if na(g_previewBearBox)
+            g_previewBearBox := box.new(bar_index - 2, top2, bar_index, bot2, border_color = color.new(i_colorBearFVG, 30),
+                 border_style = line.style_dashed, bgcolor = color.new(i_colorBearFVG, 90), extend = extend.none)
+        else
+            box.set_top(g_previewBearBox, top2)
+            box.set_bottom(g_previewBearBox, bot2)
+            box.set_right(g_previewBearBox, bar_index)
+    else if not na(g_previewBearBox)
+        box.delete(g_previewBearBox)
+        g_previewBearBox := na
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  FVG HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// True if pricePoint sits within `i_nearLiqATRMult` x ATR of any tracked liquidity level.
+f_isNearLiquidity(pricePoint) =>
+    thresh = atrVal * i_nearLiqATRMult
+    found = false
+    for lvl in g_buySideLiq
+        if not found and not na(lvl.price) and math.abs(lvl.price - pricePoint) <= thresh
+            found := true
+    for lvl in g_sellSideLiq
+        if not found and not na(lvl.price) and math.abs(lvl.price - pricePoint) <= thresh
+            found := true
+    if not found and not na(g_pdHigh.price) and math.abs(g_pdHigh.price - pricePoint) <= thresh
+        found := true
+    if not found and not na(g_pdLow.price) and math.abs(g_pdLow.price - pricePoint) <= thresh
+        found := true
+    if not found and not na(g_pwHigh.price) and math.abs(g_pwHigh.price - pricePoint) <= thresh
+        found := true
+    if not found and not na(g_pwLow.price) and math.abs(g_pwLow.price - pricePoint) <= thresh
+        found := true
+    if not found and not na(g_psHigh.price) and math.abs(g_psHigh.price - pricePoint) <= thresh
+        found := true
+    if not found and not na(g_psLow.price) and math.abs(g_psLow.price - pricePoint) <= thresh
+        found := true
+    found
+
+f_fvgLabelText(f) =>
+    dirTxt   = f.bullish ? "B" : "S"
+    scoreTxt = i_showScoreLabel ? " " + str.tostring(f.score) : ""
+    mitTxt   = i_showMitigation ? " " + f.state : ""
+    dirTxt + scoreTxt + mitTxt
+
+f_fvgTooltipText(f) =>
+    chainTxt = f.classification == "Liquidity-Driven FVG" ?
+         "\n\n" + (f.bullish ? "SELL-SIDE LIQUIDITY SWEPT\n-> BULLISH MSS\n-> BULLISH DISPLACEMENT\n-> BULLISH FVG" :
+                   "BUY-SIDE LIQUIDITY SWEPT\n-> BEARISH MSS\n-> BEARISH DISPLACEMENT\n-> BEARISH FVG") : ""
+    (f.bullish ? "BULLISH FVG" : "BEARISH FVG") + "  [" + f.classification + "]" +
+     "\nTimeframe: " + f.formationTF +
+     "\nRange: " + f_fmt(f.lower) + " - " + f_fmt(f.upper) +
+     "\nSize: " + f_fmt(f.sizeAbs) + " (" + str.tostring(f.sizePct, "#.##") + "%)" +
+     "\nQuality: " + str.tostring(f.score) + "/100 (" + f.qualityLabel + ")" +
+     "\nLiquidity swept before: " + (f.sweepBefore ? "Yes" : "No") +
+     "\nMSS before: " + (f.mssBefore ? "Yes" : "No") +
+     "\nDisplacement: " + (f.dispBefore ? "Yes" : "No") +
+     "\nHTF aligned: " + (f.htfAligned ? "Yes" : "No") +
+     "\nStatus: " + f.state + chainTxt
+
+f_isVisible(f) =>
+    switch i_fvgDisplay
+        "Hide Mitigated"   => not f.isMitigated
+        "Hide Invalidated" => not f.invalidated
+        "Active Only"      => not f.isMitigated and not f.invalidated
+        => true
+
+f_applyVisibility(f) =>
+    withinHideWindow = i_hideAfterBars <= 0 or na(f.mitigatedBar) or (bar_index - f.mitigatedBar <= i_hideAfterBars)
+    visible = f_isVisible(f) and withinHideWindow
+    col = f.bullish ? i_colorBullFVG : i_colorBearFVG
+    if not na(f.zoneBox)
+        box.set_border_color(f.zoneBox, visible ? color.new(col, 20) : color.new(col, 100))
+        box.set_bgcolor(f.zoneBox, visible ? color.new(col, 82) : color.new(col, 100))
+    if not na(f.infoLabel)
+        label.set_color(f.infoLabel, visible ? color.new(col, 85) : color.new(col, 100))
+        label.set_textcolor(f.infoLabel, visible ? color.new(col, 0) : color.new(col, 100))
+    true
+
+// Caps concurrently-active FVGs per side (section 20 performance limits). When the cap would be
+// exceeded, the OLDEST active FVG on that side is retired (marked invalidated) to make room --
+// its history/drawing is kept, it just stops counting as "active" and its box freezes.
+f_enforceActiveCap(bullish) =>
+    if f_countActive(bullish) >= i_maxActiveFVG
+        FVG oldest = na
+        for f in g_fvgList
+            if f.bullish == bullish and not f.isMitigated and not f.invalidated and not f.isHTF
+                oldest := f
+                break
+        if not na(oldest)
+            oldest.invalidated := true
+            oldest.state := "Invalid"
+            if na(oldest.mitigatedBar)
+                oldest.mitigatedBar := bar_index
+    true
+
+// Builds, scores, classifies and (if it passes all filters) draws one new FVG.
+// Returns [created, score, classification, isLiquidityDriven, upper, lower].
+f_processFVG(bullish) =>
+    c1High = high[2]
+    c1Low  = low[2]
+    upper  = bullish ? low : c1Low
+    lower  = bullish ? c1High : high
+    sizeAbs = upper - lower
+    sizePct = close != 0 ? (sizeAbs / close) * 100.0 : 0.0
+
+    passSize = (i_fvgMinATR <= 0 or sizeAbs >= atrVal * i_fvgMinATR) and (i_fvgMinPct <= 0 or sizePct >= i_fvgMinPct)
+
+    created      = false
+    scoreOut     = 0
+    clsOut       = ""
+    liqDrivenOut = false
+    upperOut     = float(na)
+    lowerOut     = float(na)
+
+    if passSize and sizeAbs > 0
+        sweepBefore  = bullish ? g_bullSeq.active : g_bearSeq.active
+        mssBefore    = bullish ? (g_bullSeq.active and g_bullSeq.mssConfirmed) : (g_bearSeq.active and g_bearSeq.mssConfirmed)
+        dispBefore   = bullish ? isDisplacementBull[1] : isDisplacementBear[1]
+        strongSize   = sizeAbs >= atrVal * i_relSizeATRMult
+        nearLiq      = f_isNearLiquidity((upper + lower) / 2.0)
+        volConfirmed = i_dispUseVolume and volAvg > 0 and volume[1] >= volAvg * i_dispVolMult
+        htfAligned   = htfValid and ((bullish and htfBias > 0) or (not bullish and htfBias < 0))
+
+        score  = 0
+        score += sweepBefore  ? i_wSweep   : 0
+        score += mssBefore    ? i_wMSS     : 0
+        score += dispBefore   ? i_wDisp    : 0
+        score += htfAligned   ? i_wHTF     : 0
+        score += strongSize   ? i_wSize    : 0
+        score += nearLiq      ? i_wNearLiq : 0
+        score += volConfirmed ? i_wVolume  : 0
+        score := math.min(score, 100)
+
+        classification = (sweepBefore and mssBefore and dispBefore) ? "Liquidity-Driven FVG" :
+             mssBefore  ? "MSS FVG" :
+             dispBefore ? "Displacement FVG" :
+             score >= i_hqMin ? "High-Probability FVG" : "Standard FVG"
+
+        pdOK = true
+        if i_usePDFilter
+            rangeHigh = ta.highest(high, i_pdRangeLen)
+            rangeLow  = ta.lowest(low, i_pdRangeLen)
+            rangeSz   = rangeHigh - rangeLow
+            if rangeSz > 0
+                pos = ((upper + lower) / 2.0 - rangeLow) / rangeSz
+                bandHalf = (i_pdEqBandPct / 100.0) / 2.0
+                // bullish FVGs must sit below the discount boundary; bearish above the premium boundary;
+                // FVGs inside the equilibrium band do not count as aligned either way.
+                pdOK := bullish ? pos <= (0.5 - bandHalf) : pos >= (0.5 + bandHalf)
+
+        if score >= i_minScoreShow and pdOK
+            f_enforceActiveCap(bullish)
+            col = bullish ? i_colorBullFVG : i_colorBearFVG
+            leftBar = bar_index - 2
+            newF = FVG.new(barIndex = bar_index, formationTime = time, bullish = bullish, upper = upper, lower = lower,
+                 sizeAbs = sizeAbs, sizePct = sizePct, formationTF = timeframe.period, isHTF = false,
+                 sweepBefore = sweepBefore, mssBefore = mssBefore, dispBefore = dispBefore, htfAligned = htfAligned,
+                 strongSize = strongSize, nearLiquidity = nearLiq, volConfirmed = volConfirmed,
+                 score = score, qualityLabel = f_qualityLabel(score), classification = classification,
+                 touchedFirst = false, filled50 = false, filledFull = false, invalidated = false,
+                 state = "Fresh", isMitigated = false, mitigatedBar = na, zoneBox = na, infoLabel = na,
+                 ceLine = na)
+
+            if i_showFVG
+                newF.zoneBox := box.new(leftBar, upper, bar_index, lower, border_color = color.new(col, 20),
+                     border_width = 1, bgcolor = color.new(col, 82), extend = extend.none)
+                // The full liquidity-shift chain (sweep -> MSS -> displacement -> FVG) for top-tier
+                // setups is surfaced in this label's tooltip rather than as a separate on-chart
+                // object, keeping the chart clean and drawing-object counts bounded.
+                newF.infoLabel := label.new(bar_index, bullish ? lower : upper, f_fvgLabelText(newF),
+                     style = bullish ? label.style_label_up : label.style_label_down,
+                     color = color.new(col, 85), textcolor = color.new(col, 0), size = size.tiny,
+                     tooltip = f_fvgTooltipText(newF))
+                if i_showCE
+                    newF.ceLine := line.new(leftBar, (upper + lower) / 2.0, bar_index, (upper + lower) / 2.0,
+                         color = color.new(col, 50), style = line.style_dotted, width = 1)
+
+            array.push(g_fvgList, newF)
+            f_pruneFVGList()
+            created      := true
+            scoreOut     := score
+            clsOut       := classification
+            liqDrivenOut := classification == "Liquidity-Driven FVG"
+            upperOut     := upper
+            lowerOut     := lower
+
+    [created, scoreOut, clsOut, liqDrivenOut, upperOut, lowerOut]
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  FVG CONFIRMATION  (candle 1 vs candle 3; only committed once candle 3 closes)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+bullGapCond = high[2] < low
+bearGapCond = low[2]  > high
+
+newBullFVG   = false
+newBearFVG   = false
+bullLiqFVG   = false
+bearLiqFVG   = false
+hqBullSetup  = false
+hqBearSetup  = false
+newBullScore = 0
+newBearScore = 0
+newBullUpper = float(na)
+newBullLower = float(na)
+newBearUpper = float(na)
+newBearLower = float(na)
+
+if barstate.isconfirmed
+    if not na(g_previewBullBox)
+        box.delete(g_previewBullBox)
+        g_previewBullBox := na
+    if not na(g_previewBearBox)
+        box.delete(g_previewBearBox)
+        g_previewBearBox := na
+
+    if bullGapCond and i_showBullFVG
+        [created, score, cls, liqDriven, upOut, loOut] = f_processFVG(true)
+        if created
+            newBullFVG := true
+            newBullScore := score
+            newBullUpper := upOut
+            newBullLower := loOut
+            if liqDriven
+                bullLiqFVG := true
+            if score >= i_alertMinScore
+                hqBullSetup := true
+
+    if bearGapCond and i_showBearFVG
+        [createdB, scoreB, clsB, liqDrivenB, upOutB, loOutB] = f_processFVG(false)
+        if createdB
+            newBearFVG := true
+            newBearScore := scoreB
+            newBearUpper := upOutB
+            newBearLower := loOutB
+            if liqDrivenB
+                bearLiqFVG := true
+            if scoreB >= i_alertMinScore
+                hqBearSetup := true
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  FVG MITIGATION & INVALIDATION TRACKING
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+anyFirstRetest = false
+any50Fill      = false
+anyFullFill    = false
+retestMsg      = ""
+fillMsg        = ""
+fullMsg        = ""
+
+if barstate.isconfirmed
+    for f in g_fvgList
+        if not f.invalidated and not f.filledFull
+            was1 = f.touchedFirst
+            was5 = f.filled50
+            wasF = f.filledFull
+
+            if f.bullish
+                if i_invalidateClose and close < f.lower
+                    f.invalidated := true
+                else
+                    fiftyLevel = (f.upper + f.lower) / 2.0
+                    if low <= f.upper
+                        f.touchedFirst := true
+                    if low <= fiftyLevel
+                        f.filled50 := true
+                    if low <= f.lower
+                        f.filledFull := true
+            else
+                if i_invalidateClose and close > f.upper
+                    f.invalidated := true
+                else
+                    fiftyLevel = (f.upper + f.lower) / 2.0
+                    if high >= f.lower
+                        f.touchedFirst := true
+                    if high >= fiftyLevel
+                        f.filled50 := true
+                    if high >= f.upper
+                        f.filledFull := true
+
+            f.isMitigated := i_mitigationDef == "First Touch" ? f.touchedFirst :
+                 i_mitigationDef == "50% Fill" ? f.filled50 : f.filledFull
+            f.state := f.invalidated ? "Invalid" : f.filledFull ? "Filled" : f.touchedFirst ? "Partial" : "Fresh"
+
+            if not was1 and f.touchedFirst
+                anyFirstRetest := true
+                retestMsg := (f.bullish ? "Bullish" : "Bearish") + " FVG first retest @ " + f_fmt(f.lower) + "-" + f_fmt(f.upper) + " | score " + str.tostring(f.score)
+            if not was5 and f.filled50
+                any50Fill := true
+                fillMsg := (f.bullish ? "Bullish" : "Bearish") + " FVG 50% mitigated @ " + f_fmt(f.lower) + "-" + f_fmt(f.upper) + " | score " + str.tostring(f.score)
+            if not wasF and f.filledFull
+                anyFullFill := true
+                fullMsg := (f.bullish ? "Bullish" : "Bearish") + " FVG fully mitigated @ " + f_fmt(f.lower) + "-" + f_fmt(f.upper) + " | score " + str.tostring(f.score)
+
+            if (f.invalidated or f.filledFull) and na(f.mitigatedBar)
+                f.mitigatedBar := bar_index
+
+            stateChanged = (was1 != f.touchedFirst) or (was5 != f.filled50) or (wasF != f.filledFull) or f.invalidated
+
+            if na(f.mitigatedBar) or bar_index <= f.mitigatedBar + i_extendBars
+                if not na(f.zoneBox)
+                    box.set_right(f.zoneBox, bar_index)
+                if not na(f.ceLine)
+                    line.set_xy2(f.ceLine, bar_index, (f.upper + f.lower) / 2.0)
+
+            if stateChanged and not na(f.infoLabel)
+                label.set_text(f.infoLabel, f_fvgLabelText(f))
+                label.set_tooltip(f.infoLabel, f_fvgTooltipText(f))
+                label.set_x(f.infoLabel, bar_index)
+        else
+            // Terminal FVGs: let the box/midline tail extend a little past the mitigation bar, then freeze.
+            if not na(f.mitigatedBar) and bar_index <= f.mitigatedBar + i_extendBars
+                if not na(f.zoneBox)
+                    box.set_right(f.zoneBox, bar_index)
+                if not na(f.ceLine)
+                    line.set_xy2(f.ceLine, bar_index, (f.upper + f.lower) / 2.0)
+
+    // Historical-display filter + auto-hide pass (data/state above is always kept -- section 11).
+    for f in g_fvgList
+        f_applyVisibility(f)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  HIGHER-TIMEFRAME FVG  (confirmed HTF bars only -- offsets [3][2][1] relative to the still-
+//  forming HTF "current" bar, so candle 3 of the pattern is always the last CLOSED htf bar)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+[htfC1High, htfC1Low, htfC3High, htfC3Low, htfCurBarTime] = request.security(syminfo.tickerid, htfSafeTF,
+     [high[3], low[3], high[1], low[1], time], lookahead = barmerge.lookahead_off)
+
+newHtfBar = htfValid and (na(htfCurBarTime[1]) or htfCurBarTime != htfCurBarTime[1])
+htfBullGap = htfC1High < htfC3Low
+htfBearGap = htfC1Low  > htfC3High
+htfBarsPerChartBar = timeframe.in_seconds(htfSafeTF) / math.max(timeframe.in_seconds(timeframe.period), 1)
+
+// Creates a purely-visual, unscored HTF FVG box (still tracked through the same mitigation loop).
+f_createHTFFVG(bullish, upper, lower) =>
+    sizeAbs = upper - lower
+    sizePct = close != 0 ? (sizeAbs / close) * 100.0 : 0.0
+    col = i_colorHTF
+    leftBar = math.max(bar_index - int(htfBarsPerChartBar * 3), 0)
+    newF = FVG.new(barIndex = bar_index, formationTime = time, bullish = bullish, upper = upper, lower = lower,
+         sizeAbs = sizeAbs, sizePct = sizePct, formationTF = htfSafeTF, isHTF = true,
+         sweepBefore = false, mssBefore = false, dispBefore = false, htfAligned = false, strongSize = false,
+         nearLiquidity = false, volConfirmed = false, score = -1, qualityLabel = "HTF", classification = "HTF FVG",
+         touchedFirst = false, filled50 = false, filledFull = false, invalidated = false,
+         state = "Fresh", isMitigated = false, mitigatedBar = na, zoneBox = na, infoLabel = na,
+         ceLine = na)
+    newF.zoneBox := box.new(leftBar, upper, bar_index, lower, border_color = color.new(col, 30), border_width = 1,
+         border_style = line.style_dashed, bgcolor = color.new(col, 88), extend = extend.none)
+    newF.infoLabel := label.new(bar_index, bullish ? lower : upper, "HTF " + (bullish ? "B" : "S"),
+         style = bullish ? label.style_label_up : label.style_label_down,
+         color = color.new(col, 85), textcolor = color.new(col, 0), size = size.tiny,
+         tooltip = "Higher-timeframe (" + htfSafeTF + ") " + (bullish ? "bullish" : "bearish") + " FVG (visual context only, not scored)" +
+                   "\nRange: " + f_fmt(lower) + " - " + f_fmt(upper))
+    array.push(g_fvgList, newF)
+    f_pruneFVGList()
+    true
+
+if barstate.isconfirmed and newHtfBar and htfValid and i_showHTFFVG
+    if htfBullGap
+        f_createHTFFVG(true, htfC3Low, htfC1High)
+    if htfBearGap
+        f_createHTFFVG(false, htfC1Low, htfC3High)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  PREMIUM / DISCOUNT DEALING RANGE  (optional visual overlay; also drives the section-16 filter
+//  used inside f_processFVG above)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+var box  g_pdBox      = na
+var line g_eqLine     = na
+var line g_premLine   = na
+var line g_discLine   = na
+
+if i_showPremDisc and barstate.islast
+    pdHi = ta.highest(high, i_pdRangeLen)
+    pdLo = ta.lowest(low, i_pdRangeLen)
+    eqPrice = (pdHi + pdLo) / 2.0
+    bandHalfPx = (pdHi - pdLo) * (i_pdEqBandPct / 100.0) / 2.0
+    premEdge = eqPrice + bandHalfPx      // top of the equilibrium band = start of premium
+    discEdge = eqPrice - bandHalfPx      // bottom of the equilibrium band = start of discount
+    leftX = bar_index - i_pdRangeLen
+    if na(g_pdBox)
+        g_pdBox := box.new(leftX, pdHi, bar_index, pdLo, border_color = color.new(color.gray, 60),
+             bgcolor = color.new(color.gray, 95), extend = extend.none)
+        g_eqLine   := line.new(leftX, eqPrice, bar_index, eqPrice, color = color.new(color.gray, 30), style = line.style_dashed)
+        g_premLine := line.new(leftX, premEdge, bar_index, premEdge, color = color.new(i_colorBuySide, 60), style = line.style_dotted)
+        g_discLine := line.new(leftX, discEdge, bar_index, discEdge, color = color.new(i_colorSellSide, 60), style = line.style_dotted)
+    else
+        box.set_lefttop(g_pdBox, leftX, pdHi)
+        box.set_rightbottom(g_pdBox, bar_index, pdLo)
+        line.set_xy1(g_eqLine, leftX, eqPrice)
+        line.set_xy2(g_eqLine, bar_index, eqPrice)
+        line.set_xy1(g_premLine, leftX, premEdge)
+        line.set_xy2(g_premLine, bar_index, premEdge)
+        line.set_xy1(g_discLine, leftX, discEdge)
+        line.set_xy2(g_discLine, bar_index, discEdge)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  TARGET LIQUIDITY  (nearest unswept level on the correct side of price)
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+f_findNearestLiquidity(above) =>
+    bestPrice = float(na)
+    bestKind  = ""
+    arr = above ? g_buySideLiq : g_sellSideLiq
+    for lvl in arr
+        if not lvl.swept and not na(lvl.price)
+            ok = above ? lvl.price > close : lvl.price < close
+            if ok and (na(bestPrice) or math.abs(lvl.price - close) < math.abs(bestPrice - close))
+                bestPrice := lvl.price
+                bestKind  := lvl.kind
+    if i_usePDHL
+        dl = above ? g_pdHigh : g_pdLow
+        if not dl.swept and not na(dl.price)
+            ok2 = above ? dl.price > close : dl.price < close
+            if ok2 and (na(bestPrice) or math.abs(dl.price - close) < math.abs(bestPrice - close))
+                bestPrice := dl.price
+                bestKind  := dl.kind
+    if i_usePWHL
+        wl = above ? g_pwHigh : g_pwLow
+        if not wl.swept and not na(wl.price)
+            ok3 = above ? wl.price > close : wl.price < close
+            if ok3 and (na(bestPrice) or math.abs(wl.price - close) < math.abs(bestPrice - close))
+                bestPrice := wl.price
+                bestKind  := wl.kind
+    if i_usePrevSession
+        sl = above ? g_psHigh : g_psLow
+        if not sl.swept and not na(sl.price)
+            ok4 = above ? sl.price > close : sl.price < close
+            if ok4 and (na(bestPrice) or math.abs(sl.price - close) < math.abs(bestPrice - close))
+                bestPrice := sl.price
+                bestKind  := sl.kind
+    [bestPrice, bestKind]
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  ENTRY ZONE / SL REFERENCE / TARGET  for high-quality setups (analytical context only --
+//  never a buy/sell signal, per section 14). Kept in capped arrays so a long history of setups
+//  cannot grow drawing-object counts without bound (section 20 performance limits).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+var array<label> g_setupLabels = array.new<label>()
+var array<line>  g_setupLines  = array.new<line>()
+SETUP_OBJ_CAP = 30
+
+f_addCappedLabel(arr, lbl) =>
+    array.push(arr, lbl)
+    if array.size(arr) > SETUP_OBJ_CAP
+        label.delete(array.shift(arr))
+    true
+
+f_addCappedLine(arr, ln) =>
+    array.push(arr, ln)
+    if array.size(arr) > SETUP_OBJ_CAP
+        line.delete(array.shift(arr))
+    true
+
+if barstate.isconfirmed and i_showTargets
+    if hqBullSetup
+        [tgtPrice, tgtKind] = f_findNearestLiquidity(true)
+        slRef = g_bullSeq.sweepExtreme - atrVal * 0.1
+        lblTxt = "BULLISH FVG SETUP" + (na(tgtPrice) ? "" : "\nTarget: " + tgtKind + " @ " + f_fmt(tgtPrice)) +
+             (na(slRef) ? "" : "\nSL ref: " + f_fmt(slRef))
+        setupLbl = label.new(bar_index, low, lblTxt, style = label.style_label_up, color = color.new(i_colorSellSide, 15),
+             textcolor = color.white, size = size.small,
+             tooltip = "Analytical context, not a guaranteed signal.\nEntry zone = the bullish FVG box.\nInvalidated if price closes back below the FVG.")
+        f_addCappedLabel(g_setupLabels, setupLbl)
+        if not na(tgtPrice)
+            tgtLn = line.new(bar_index, tgtPrice, bar_index + 10, tgtPrice, color = color.new(i_colorSellSide, 40), style = line.style_dashed, width = 1)
+            f_addCappedLine(g_setupLines, tgtLn)
+        if not na(slRef)
+            slLn = line.new(bar_index, slRef, bar_index + 10, slRef, color = color.new(color.red, 40), style = line.style_dotted, width = 1)
+            f_addCappedLine(g_setupLines, slLn)
+    if hqBearSetup
+        [tgtPriceB, tgtKindB] = f_findNearestLiquidity(false)
+        slRefB = g_bearSeq.sweepExtreme + atrVal * 0.1
+        lblTxtB = "BEARISH FVG SETUP" + (na(tgtPriceB) ? "" : "\nTarget: " + tgtKindB + " @ " + f_fmt(tgtPriceB)) +
+             (na(slRefB) ? "" : "\nSL ref: " + f_fmt(slRefB))
+        setupLblB = label.new(bar_index, high, lblTxtB, style = label.style_label_down, color = color.new(i_colorBuySide, 15),
+             textcolor = color.white, size = size.small,
+             tooltip = "Analytical context, not a guaranteed signal.\nEntry zone = the bearish FVG box.\nInvalidated if price closes back above the FVG.")
+        f_addCappedLabel(g_setupLabels, setupLblB)
+        if not na(tgtPriceB)
+            tgtLnB = line.new(bar_index, tgtPriceB, bar_index + 10, tgtPriceB, color = color.new(i_colorBuySide, 40), style = line.style_dashed, width = 1)
+            f_addCappedLine(g_setupLines, tgtLnB)
+        if not na(slRefB)
+            slLnB = line.new(bar_index, slRefB, bar_index + 10, slRefB, color = color.new(color.red, 40), style = line.style_dotted, width = 1)
+            f_addCappedLine(g_setupLines, slLnB)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+f_dashPosition() =>
+    switch i_dashPosition
+        "Top Right"    => position.top_right
+        "Top Left"     => position.top_left
+        "Bottom Right" => position.bottom_right
+        "Bottom Left"  => position.bottom_left
+        => position.top_right
+
+var table g_dash = na
+
+if i_showDashboard and barstate.islast
+    if na(g_dash)
+        g_dash := table.new(f_dashPosition(), 2, 9, bgcolor = color.new(color.black, 15),
+             border_color = color.new(color.gray, 50), border_width = 1, frame_color = color.new(color.gray, 30), frame_width = 1)
+
+    activeBull = f_countActive(true)
+    activeBear = f_countActive(false)
+    [bestScore, bestDir] = f_bestActiveScore()
+    bestTxt = bestScore < 0 ? "—" : bestDir + " " + str.tostring(bestScore) + "/100"
+    liqState = g_lastMSSDir == "BULLISH" ? "SELL-SIDE TAKEN" : g_lastMSSDir == "BEARISH" ? "BUY-SIDE TAKEN" : "BALANCED"
+    lastEventTxt = na(g_lastLiqEventBar) ? "None yet" : g_lastLiqEventTxt + " (" + str.tostring(bar_index - g_lastLiqEventBar) + "b ago)"
+    biasCol = htfBias > 0 ? color.new(i_colorSellSide, 0) : htfBias < 0 ? color.new(i_colorBuySide, 0) : color.gray
+    dirCol  = g_structureBias == "BULLISH" ? color.new(i_colorSellSide, 0) : g_structureBias == "BEARISH" ? color.new(i_colorBuySide, 0) : color.gray
+    mssCol  = g_lastMSSDir == "BULLISH" ? color.new(i_colorSellSide, 0) : g_lastMSSDir == "BEARISH" ? color.new(i_colorBuySide, 0) : color.gray
+
+    table.cell(g_dash, 0, 0, "LIQUIDITY SHIFT + FVG", text_color = color.white, bgcolor = color.new(color.blue, 55), text_size = size.small)
+    table.cell(g_dash, 1, 0, "", bgcolor = color.new(color.blue, 55))
+    table.cell(g_dash, 0, 1, "Market Direction",      text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 1, g_structureBias,          text_color = dirCol,     text_size = size.small)
+    table.cell(g_dash, 0, 2, "Liquidity State",        text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 2, liqState,                 text_color = color.white, text_size = size.small)
+    table.cell(g_dash, 0, 3, "Last Liquidity Event",   text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 3, lastEventTxt,             text_color = color.white, text_size = size.small)
+    table.cell(g_dash, 0, 4, "MSS",                    text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 4, g_lastMSSDir,             text_color = mssCol,     text_size = size.small)
+    table.cell(g_dash, 0, 5, "Active Bullish FVGs",    text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 5, str.tostring(activeBull), text_color = color.white, text_size = size.small)
+    table.cell(g_dash, 0, 6, "Active Bearish FVGs",    text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 6, str.tostring(activeBear), text_color = color.white, text_size = size.small)
+    table.cell(g_dash, 0, 7, "Best Active FVG",        text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 7, bestTxt,                  text_color = color.white, text_size = size.small)
+    table.cell(g_dash, 0, 8, "HTF Bias",               text_color = color.gray, text_halign = text.align_left, text_size = size.small)
+    table.cell(g_dash, 1, 8, htfBiasTxt,                text_color = biasCol,    text_size = size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+//  ALERTS
+//  Each event exposes a plain alertcondition() (pick a single specific event in TradingView's
+//  "Create Alert" dialog) AND fires alert() with a fully dynamic message (choose "Any alert()
+//  function call" to receive every event with symbol / timeframe / direction / range / score /
+//  liquidity / MSS / displacement context baked into the text).
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+alertcondition(newBullFVG,    title = "New Bullish FVG",              message = "{{ticker}} ({{interval}}): New Bullish FVG formed")
+alertcondition(newBearFVG,    title = "New Bearish FVG",              message = "{{ticker}} ({{interval}}): New Bearish FVG formed")
+alertcondition(bullSweepEvent, title = "Bullish Liquidity Sweep",     message = "{{ticker}} ({{interval}}): Sell-side liquidity swept (bullish)")
+alertcondition(bearSweepEvent, title = "Bearish Liquidity Sweep",     message = "{{ticker}} ({{interval}}): Buy-side liquidity swept (bearish)")
+alertcondition(bullMSSEvent,  title = "Bullish MSS",                  message = "{{ticker}} ({{interval}}): Bullish Market Structure Shift confirmed")
+alertcondition(bearMSSEvent,  title = "Bearish MSS",                  message = "{{ticker}} ({{interval}}): Bearish Market Structure Shift confirmed")
+alertcondition(bullLiqFVG,    title = "Bullish Liquidity-Driven FVG", message = "{{ticker}} ({{interval}}): Bullish Liquidity-Driven FVG (sweep+MSS+displacement)")
+alertcondition(bearLiqFVG,    title = "Bearish Liquidity-Driven FVG", message = "{{ticker}} ({{interval}}): Bearish Liquidity-Driven FVG (sweep+MSS+displacement)")
+alertcondition(hqBullSetup,   title = "High-Quality Bullish Setup",   message = "{{ticker}} ({{interval}}): High-Quality Bullish FVG Setup")
+alertcondition(hqBearSetup,   title = "High-Quality Bearish Setup",   message = "{{ticker}} ({{interval}}): High-Quality Bearish FVG Setup")
+alertcondition(anyFirstRetest, title = "FVG First Retest",            message = "{{ticker}} ({{interval}}): Price retested an FVG for the first time")
+alertcondition(any50Fill,     title = "FVG 50% Mitigation",           message = "{{ticker}} ({{interval}}): FVG reached 50% mitigation")
+alertcondition(anyFullFill,   title = "FVG Full Mitigation",          message = "{{ticker}} ({{interval}}): FVG fully mitigated")
+
+if newBullFVG
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BULLISH FVG | Range: " + f_fmt(newBullLower) + "-" + f_fmt(newBullUpper) +
+         " | Score: " + str.tostring(newBullScore) + "/100 (" + f_qualityLabel(newBullScore) + ")" +
+         " | Sweep: " + (g_bullSeq.active ? "Yes" : "No") +
+         " | MSS: " + (g_bullSeq.active and g_bullSeq.mssConfirmed ? "Yes" : "No") +
+         " | Displacement: " + (isDisplacementBull[1] ? "Yes" : "No"), alert.freq_once_per_bar_close)
+
+if newBearFVG
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BEARISH FVG | Range: " + f_fmt(newBearLower) + "-" + f_fmt(newBearUpper) +
+         " | Score: " + str.tostring(newBearScore) + "/100 (" + f_qualityLabel(newBearScore) + ")" +
+         " | Sweep: " + (g_bearSeq.active ? "Yes" : "No") +
+         " | MSS: " + (g_bearSeq.active and g_bearSeq.mssConfirmed ? "Yes" : "No") +
+         " | Displacement: " + (isDisplacementBear[1] ? "Yes" : "No"), alert.freq_once_per_bar_close)
+
+if bullSweepEvent
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BULLISH LIQUIDITY SWEEP | " + g_bullSeq.sweepKind + " @ " + f_fmt(g_bullSeq.sweepLevel) +
+         " | Rejection: " + str.tostring(g_bullSeq.rejectionCLV * 100, "#") + "%", alert.freq_once_per_bar_close)
+
+if bearSweepEvent
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BEARISH LIQUIDITY SWEEP | " + g_bearSeq.sweepKind + " @ " + f_fmt(g_bearSeq.sweepLevel) +
+         " | Rejection: " + str.tostring(g_bearSeq.rejectionCLV * 100, "#") + "%", alert.freq_once_per_bar_close)
+
+if bullMSSEvent
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BULLISH MSS CONFIRMED | Structure broken @ " + f_fmt(g_bullSeq.structureRef) +
+         " | Follows " + g_bullSeq.sweepKind + " sweep", alert.freq_once_per_bar_close)
+
+if bearMSSEvent
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BEARISH MSS CONFIRMED | Structure broken @ " + f_fmt(g_bearSeq.structureRef) +
+         " | Follows " + g_bearSeq.sweepKind + " sweep", alert.freq_once_per_bar_close)
+
+if bullLiqFVG
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BULLISH LIQUIDITY-DRIVEN FVG | Sweep+MSS+Displacement confirmed | Range: " + f_fmt(newBullLower) + "-" + f_fmt(newBullUpper) +
+         " | Score: " + str.tostring(newBullScore) + "/100", alert.freq_once_per_bar_close)
+
+if bearLiqFVG
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | BEARISH LIQUIDITY-DRIVEN FVG | Sweep+MSS+Displacement confirmed | Range: " + f_fmt(newBearLower) + "-" + f_fmt(newBearUpper) +
+         " | Score: " + str.tostring(newBearScore) + "/100", alert.freq_once_per_bar_close)
+
+if hqBullSetup
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | HIGH-QUALITY BULLISH SETUP | Score: " + str.tostring(newBullScore) + "/100 (" + f_qualityLabel(newBullScore) + ")" +
+         " | Range: " + f_fmt(newBullLower) + "-" + f_fmt(newBullUpper), alert.freq_once_per_bar_close)
+
+if hqBearSetup
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period +
+         " | HIGH-QUALITY BEARISH SETUP | Score: " + str.tostring(newBearScore) + "/100 (" + f_qualityLabel(newBearScore) + ")" +
+         " | Range: " + f_fmt(newBearLower) + "-" + f_fmt(newBearUpper), alert.freq_once_per_bar_close)
+
+if anyFirstRetest
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period + " | " + retestMsg, alert.freq_once_per_bar_close)
+
+if any50Fill
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period + " | " + fillMsg, alert.freq_once_per_bar_close)
+
+if anyFullFill
+    alert("Liquidity Shift + FVG | " + syminfo.tickerid + " " + timeframe.period + " | " + fullMsg, alert.freq_once_per_bar_close)
