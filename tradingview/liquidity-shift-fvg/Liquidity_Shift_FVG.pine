@@ -598,8 +598,6 @@ f_advanceSequence(seq, isBullish) =>
                     seq.mssConfirmed := true
                     seq.mssBar := bar_index
                     mssJustNow := true
-                    g_lastMSSDir := isBullish ? "BULLISH" : "BEARISH"
-                    g_structureBias := isBullish ? "BULLISH" : "BEARISH"
                     if i_showMSS
                         mssLbl = label.new(bar_index, isBullish ? low : high, isBullish ? "BULLISH MSS" : "BEARISH MSS",
                              style = isBullish ? label.style_label_up : label.style_label_down,
@@ -689,6 +687,16 @@ if barstate.isconfirmed
 
     bullMSSEvent := f_advanceSequence(g_bullSeq, true)
     bearMSSEvent := f_advanceSequence(g_bearSeq, false)
+
+    // Global dashboard state can only be reassigned from top-level script code, not from inside
+    // a function -- so the direction is set here, right after the function call, rather than
+    // inside f_advanceSequence itself.
+    if bullMSSEvent
+        g_lastMSSDir := "BULLISH"
+        g_structureBias := "BULLISH"
+    if bearMSSEvent
+        g_lastMSSDir := "BEARISH"
+        g_structureBias := "BEARISH"
 
     if bullSweepEvent
         g_lastLiqEventTxt := "Sell-side swept @ " + f_fmt(g_bullSeq.sweepLevel)
