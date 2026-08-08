@@ -17,7 +17,7 @@
 //  "developing" preview (dashed, unconfirmed) is clearly separated from confirmed objects.
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 //@version=6
-indicator("Liquidity Shift + FVG [ICT/SMC]", shorttitle = "LiqShift+FVG", overlay = true,
+indicator("Liquidity Shift + FVG [ICT/SMC]", shorttitle = "Liq+FVG", overlay = true,
      max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500)
 
 // ───────────────────────────────────────────────────────────────────────────────────────────
@@ -342,6 +342,13 @@ f_bestActiveScore() =>
 //  DISPLACEMENT DETECTION  (runs every bar; only ever consumed inside confirmed-bar blocks)
 // ═══════════════════════════════════════════════════════════════════════════════════════════
 atrVal    = ta.atr(i_dispATRLen)
+// ta.*() calls must run unconditionally on every bar to keep their internal running calculation
+// correct -- calling them only inside an `if` (or inside a function invoked conditionally) skips
+// bars and corrupts the result. atrEq14 / pdRangeHigh / pdRangeLow are hoisted here for that
+// reason and simply read (never recomputed) wherever the tolerance / dealing-range value is needed.
+atrEq14     = ta.atr(14)
+pdRangeHigh = ta.highest(high, i_pdRangeLen)
+pdRangeLow  = ta.lowest(low, i_pdRangeLen)
 bodySize  = math.abs(close - open)
 rangeSize = high - low
 bodyPct   = rangeSize > 0 ? (bodySize / rangeSize) * 100.0 : 0.0
@@ -388,7 +395,7 @@ f_addLevel(arr, price, barIdx, kind, isBuySide) =>
 // Finds a nearby unswept level (within tolerance) and merges into it as "Equal Highs/Lows";
 // otherwise creates a fresh level. Equal highs/lows are the classic ICT multi-touch liquidity pool.
 f_upsertLevel(arr, price, barIdx, isBuySide, kindText) =>
-    tol = ta.atr(14) * (i_eqTolPct / 100.0)
+    tol = atrEq14 * (i_eqTolPct / 100.0)
     LiqLevel foundLvl = na
     for lvl in arr
         if not lvl.swept and lvl.buySide == isBuySide and math.abs(lvl.price - price) <= tol
@@ -416,7 +423,7 @@ liqPL = ta.pivotlow(i_liqSwingLen, i_liqSwingLen)
 if barstate.isconfirmed
     if not na(liqPH)
         pivotBar   = bar_index - i_liqSwingLen
-        tolEq      = ta.atr(14) * (i_eqTolPct / 100.0)
+        tolEq      = atrEq14 * (i_eqTolPct / 100.0)
         isEqual    = i_useEqualHL and not na(g_lastLiqSwingHigh) and math.abs(liqPH - g_lastLiqSwingHigh) <= tolEq
         if isEqual
             f_upsertLevel(g_buySideLiq, liqPH, pivotBar, true, "Equal Highs")
@@ -427,7 +434,7 @@ if barstate.isconfirmed
 
     if not na(liqPL)
         pivotBarL  = bar_index - i_liqSwingLen
-        tolEqL     = ta.atr(14) * (i_eqTolPct / 100.0)
+        tolEqL     = atrEq14 * (i_eqTolPct / 100.0)
         isEqualL   = i_useEqualHL and not na(g_lastLiqSwingLow) and math.abs(liqPL - g_lastLiqSwingLow) <= tolEqL
         if isEqualL
             f_upsertLevel(g_sellSideLiq, liqPL, pivotBarL, false, "Equal Lows")
@@ -883,11 +890,9 @@ f_processFVG(bullish) =>
 
         pdOK = true
         if i_usePDFilter
-            rangeHigh = ta.highest(high, i_pdRangeLen)
-            rangeLow  = ta.lowest(low, i_pdRangeLen)
-            rangeSz   = rangeHigh - rangeLow
+            rangeSz = pdRangeHigh - pdRangeLow
             if rangeSz > 0
-                pos = ((upper + lower) / 2.0 - rangeLow) / rangeSz
+                pos = ((upper + lower) / 2.0 - pdRangeLow) / rangeSz
                 bandHalf = (i_pdEqBandPct / 100.0) / 2.0
                 // bullish FVGs must sit below the discount boundary; bearish above the premium boundary;
                 // FVGs inside the equilibrium band do not count as aligned either way.
@@ -1115,8 +1120,8 @@ var line g_premLine   = na
 var line g_discLine   = na
 
 if i_showPremDisc and barstate.islast
-    pdHi = ta.highest(high, i_pdRangeLen)
-    pdLo = ta.lowest(low, i_pdRangeLen)
+    pdHi = pdRangeHigh    // read the unconditionally-computed top-level value, never recomputed here
+    pdLo = pdRangeLow
     eqPrice = (pdHi + pdLo) / 2.0
     bandHalfPx = (pdHi - pdLo) * (i_pdEqBandPct / 100.0) / 2.0
     premEdge = eqPrice + bandHalfPx      // top of the equilibrium band = start of premium
