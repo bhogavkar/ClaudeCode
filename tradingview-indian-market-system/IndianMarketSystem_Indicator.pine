@@ -1703,9 +1703,12 @@ f_buildJSON(_signal, _status) =>
     _t1 = _signal == "BUY" ? target1Long : target1Short
     _t2 = _signal == "BUY" ? target2Long : target2Short
     _rr = _signal == "BUY" ? r1Long : r1Short
-    str.format('{{"symbol":"{0}","exchange":"{1}","timeframe":"{2}","mode":"{3}","signal":"{4}","signal_status":"{5}","score":{6},"entry":{7},"stop_loss":{8},"target_1":{9},"target_2":{10},"risk_reward":{11},"volume_ratio":{12},"market_regime":"{13}","htf_bias":"{14}"}}',
-     syminfo.ticker, syminfo.prefix, timeframe.period, resolvedMode, _signal, _status, str.tostring(math.round(_score)),
-     f_fmtPrice(close), f_fmtPrice(_stop), f_fmtPrice(_t1), f_fmtPrice(_t2), str.tostring(_rr, "#.##"), str.tostring(rvol, "#.##"), marketRegime, htfBiasLabel)
+    "{\"symbol\":\"" + syminfo.ticker + "\",\"exchange\":\"" + syminfo.prefix + "\",\"timeframe\":\"" + timeframe.period +
+     "\",\"mode\":\"" + resolvedMode + "\",\"signal\":\"" + _signal + "\",\"signal_status\":\"" + _status +
+     "\",\"score\":" + str.tostring(math.round(_score)) + ",\"entry\":" + f_fmtPrice(close) +
+     ",\"stop_loss\":" + f_fmtPrice(_stop) + ",\"target_1\":" + f_fmtPrice(_t1) + ",\"target_2\":" + f_fmtPrice(_t2) +
+     ",\"risk_reward\":" + str.tostring(_rr, "#.##") + ",\"volume_ratio\":" + str.tostring(rvol, "#.##") +
+     ",\"market_regime\":\"" + marketRegime + "\",\"htf_bias\":\"" + htfBiasLabel + "\"}"
 
 alertsOn = enableAlertsInput and barstate.isconfirmed
 
