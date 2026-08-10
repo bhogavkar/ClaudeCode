@@ -1,0 +1,1950 @@
+//@version=6
+
+// =============================================================================
+// GOLD (XAUUSD) SPOT SWING + INTRADAY TRADING SYSTEM  —  STRATEGY / BACKTEST ENGINE
+// =============================================================================
+// This script uses the EXACT SAME confluence / signal engine as
+// "GoldXAUUSD_Indicator.pine" (Sections 1-25 below are intentionally
+// byte-for-byte identical logic: trend, volatility, structure, liquidity,
+// FVG, volume, VWAP, patterns, regime, scoring, entry/stop/target math,
+// PLUS the Gold-specific daily-anchor/active-hours/weekly-close model and
+// the "strong/verified" min-tradable-class + consecutive-confirmation gates).
+// What differs, by design (see Part 65 of the original spec / the User Guide):
+//   - Section 26 sizes positions off live strategy.equity instead of the
+//     indicator's static, illustrative "Account Capital" input.
+//   - Section 27 (Overtrading Protection) enforces limits using REAL strategy
+//     equity/trade history instead of the indicator's informational simulation.
+//   - Section 28 (Duplicate Control) uses the REAL open-position state.
+//   - Section 30+ replaces the indicator's single-trade "what-if" tracker with
+//     real strategy.entry()/strategy.exit() orders, commission, slippage,
+//     position sizing off live equity, trailing/breakeven/partials, and a
+//     custom performance-statistics table.
+// Same signal RULES throughout — different, appropriately real, execution
+// bookkeeping. See the User Guide for a full explanation of this split.
+//
+// IMPORTANT / DISCLAIMER
+//   - Technical analysis only. Backtests use TradingView's own OHLCV feed.
+//   - Historical performance does NOT guarantee future performance.
+//   - This is a bar-close ("stop"/"limit" simulated) backtest, not a tick-by-
+//     tick order-book simulation. Real fills, especially on gaps/rollovers and
+//     in fast-moving conditions, may differ.
+// =============================================================================
+
+strategy(title = "Gold XAUUSD Swing + Intraday Trading System [Strategy]",
+     shorttitle = "Gold-IMS-BT",
+     overlay = true,
+     initial_capital = input.float(1000000, "Initial Capital ($)", group = "Backtest Engine"),
+     default_qty_type = strategy.fixed,
+     default_qty_value = 1,
+     commission_type = strategy.commission.percent,
+     commission_value = input.float(0.03, "Commission per Side (%)", group = "Backtest Engine",
+         tooltip = "Approximate. Real gold/CFD costs vary a lot by broker: spread markup, per-lot commission, and overnight swap/rollover fees are usually the bigger drag, not a percentage commission — tune this (and consider modelling spread via Slippage below) to match your actual broker."),
+     slippage = input.int(1, "Slippage (ticks per fill)", minval = 0, group = "Backtest Engine"),
+     pyramiding = 1,   // max concurrent positions fixed at 1 (conservative default) — see Section 30
+     calc_on_order_fills = true,
+     calc_on_every_tick = false,
+     max_labels_count = 500,
+     max_lines_count = 500,
+     max_boxes_count = 500,
+     max_bars_back = 5000)
+
+// #############################################################################
+// SECTION 1 — INPUTS  (identical to the indicator, plus a Backtest Engine group)
+// #############################################################################
+
+gMode          = "Mode & Style"
+modeInput      = input.string("AUTO", "Trading Mode", options = ["AUTO", "INTRADAY", "SWING"], group = gMode,
+     tooltip = "AUTO selects INTRADAY on charts below 2H and SWING on 2H and above. You can always override.")
+styleInput     = input.string("BEGINNER", "Display Style", options = ["BEGINNER", "ADVANCED"], group = gMode)
+htfOverrideTF  = input.timeframe("", "Manual HTF Override (blank = Auto)", group = gMode)
+
+gSess          = "Session & Active Hours (UTC)"
+dailyAnchorInput = input.string("0000", "Daily Anchor Time (HHMM, UTC)", group = gSess,
+     tooltip = "Where each 'trading day' resets for VWAP, the Daily Reference Range, and gap detection. 0000 UTC is a simple, DST-free default; set it to your broker's own daily rollover if you know it.")
+openProtectMin = input.int(10, "Minutes to Wait After Daily Rollover", minval = 0, maxval = 60, group = gSess)
+allowImmediateOpen = input.bool(false, "Allow Signals Immediately At Rollover", group = gSess)
+orMinutesInput = input.int(15, "Daily Reference Range Length (minutes)", options = [5, 15, 30, 60], group = gSess)
+useActiveHoursFilter = input.bool(true, "Restrict New Signals to Active Hours", group = gSess,
+     tooltip = "A signal-QUALITY filter, not a market-hours filter -- Gold keeps trading either way. Default window covers the London+New York overlap.")
+activeHoursSession = input.session("0600-1900", "Active Hours Window (UTC)", group = gSess)
+fridayCloseInput = input.string("2200", "Weekly Close Time (HHMM, UTC, Friday)", group = gSess)
+weekendProtectHoursInput = input.float(2.0, "Avoid New Entries Within N Hours of Weekly Close", minval = 0, group = gSess)
+
+gTrend         = "Trend Engine"
+emaFastLen     = input.int(20, "Fast EMA", minval = 2, group = gTrend)
+emaMedLen      = input.int(50, "Medium EMA", minval = 2, group = gTrend)
+emaSlowLen     = input.int(200, "Slow EMA", minval = 2, group = gTrend)
+slopeLookback  = input.int(3, "EMA Slope Lookback (bars)", minval = 1, group = gTrend)
+adxLen         = input.int(14, "ADX Length", minval = 2, group = gTrend)
+adxWeakTh      = input.float(18.0, "ADX Weak-Trend Threshold", group = gTrend)
+adxStrongTh    = input.float(25.0, "ADX Strong-Trend Threshold", group = gTrend)
+
+gVol           = "Volatility Engine (ATR)"
+atrLen         = input.int(14, "ATR Length", minval = 2, group = gVol)
+volPctileLen   = input.int(100, "Volatility Percentile Lookback", minval = 20, group = gVol)
+squeezeTh      = input.float(20.0, "Squeeze Percentile (below)", group = gVol)
+extremeVolTh   = input.float(90.0, "Extreme Volatility Percentile (above)", group = gVol)
+atrExpMult     = input.float(1.2, "ATR Expansion Multiple (vs its own average)", group = gVol)
+atrConMult     = input.float(0.8, "ATR Contraction Multiple (vs its own average)", group = gVol)
+
+gStruct        = "Market Structure"
+swingSens      = input.int(7, "Swing Sensitivity (pivot left/right bars)", minval = 2, maxval = 30, group = gStruct,
+     tooltip = "Higher = fewer, more significant swing points. Default raised to 7 (vs. 5 for slower markets) to filter more of the wick noise typical of a 5m Gold chart.")
+
+gLiq           = "Liquidity Engine"
+eqTolMult      = input.float(0.15, "Equal High/Low Tolerance (x ATR)", group = gLiq)
+sweepIntrusion = input.float(0.05, "Minimum Sweep Intrusion (x ATR)", group = gLiq)
+liqShiftMaxBars = input.int(15, "Liquidity Shift Max Bars Between Stages", minval = 3, group = gLiq)
+dispAtrMult    = input.float(0.8, "Displacement Candle Body (x ATR)", group = gLiq)
+dispBodyPct    = input.float(0.55, "Displacement Minimum Body % of Range", minval = 0.1, maxval = 1.0, group = gLiq)
+
+gFVG           = "Fair Value Gaps"
+fvgMinAtrMult  = input.float(0.05, "Minimum FVG Size (x ATR)", group = gFVG)
+fvgMaxTracked  = input.int(40, "Max FVGs Tracked On Chart", minval = 5, maxval = 100, group = gFVG)
+fvgFullCloseReq = input.bool(true, "Full Mitigation Requires a CLOSE Through", group = gFVG)
+
+gVolu          = "Volume Engine"
+rvolLen        = input.int(20, "RVOL Average Volume Lookback", minval = 2, group = gVolu)
+rvolLow        = input.float(0.7, "RVOL Low / Normal boundary", group = gVolu)
+rvolNormalHi   = input.float(1.0, "RVOL Normal / Elevated boundary", group = gVolu)
+rvolElevatedHi = input.float(1.5, "RVOL Elevated / Strong boundary", group = gVolu)
+rvolStrongHi   = input.float(2.0, "RVOL Strong / Extreme boundary", group = gVolu)
+
+gVWAP          = "VWAP (Intraday)"
+showVwapBandsInput = input.bool(true, "Show VWAP Bands", group = gVWAP)
+vwapBandMult1  = input.float(1.0, "VWAP Band 1 (std-dev)", group = gVWAP)
+vwapBandMult2  = input.float(2.0, "VWAP Band 2 (std-dev)", group = gVWAP)
+vwapSlopeLen   = input.int(5, "VWAP Slope Lookback", minval = 1, group = gVWAP)
+
+gGap           = "Gap Analysis"
+gapSmallMult   = input.float(0.3, "Small Gap Threshold (x Daily ATR)", group = gGap)
+gapLargeMult   = input.float(1.0, "Large Gap Threshold (x Daily ATR)", group = gGap)
+
+gCandle        = "Candlestick Patterns"
+dojiBodyPct    = input.float(0.1, "Doji Max Body % of Range", group = gCandle)
+marubozuBodyPct = input.float(0.9, "Marubozu Min Body % of Range", group = gCandle)
+wickBodyRatio  = input.float(2.0, "Hammer/Pin/Star Wick-to-Body Ratio", group = gCandle)
+
+gPattern       = "Classic Chart Patterns"
+patternTolPct  = input.float(1.5, "Comparable-Peak Tolerance %", group = gPattern)
+patternLookback = input.int(8, "Pivots To Scan For Patterns", minval = 3, maxval = 15, group = gPattern)
+
+gSR            = "Support / Resistance"
+srMaxLevels    = input.int(3, "Max Levels Shown Each Side", minval = 1, maxval = 6, group = gSR)
+srTouchTolMult = input.float(0.25, "Level Touch Tolerance (x ATR)", group = gSR)
+
+gMom           = "Momentum Engine"
+rsiLen         = input.int(14, "RSI Length", group = gMom)
+macdFastLen    = input.int(12, "MACD Fast", group = gMom)
+macdSlowLen    = input.int(26, "MACD Slow", group = gMom)
+macdSigLen     = input.int(9, "MACD Signal", group = gMom)
+stochLen       = input.int(14, "Stochastic Length", group = gMom)
+stochSmoothK   = input.int(3, "Stochastic %K Smoothing", group = gMom)
+stochSmoothD   = input.int(3, "Stochastic %D Smoothing", group = gMom)
+rocLen         = input.int(10, "ROC Length", group = gMom)
+
+gWeights       = "Confluence Score Weights"
+wTrend         = input.float(16, "Trend Weight", group = gWeights)
+wStructure     = input.float(18, "Market Structure Weight", group = gWeights)
+wLiquidity     = input.float(17, "Liquidity Weight", group = gWeights)
+wFVG           = input.float(10, "Fair Value Gap Weight", group = gWeights)
+wVolume        = input.float(8, "Volume Weight", group = gWeights,
+     tooltip = "Weighted down vs. an equities build: most Gold/CFD feeds report tick volume, not consolidated exchange volume, so it's weaker evidence here.")
+wMomentum      = input.float(13, "Momentum Weight", group = gWeights)
+wLocation      = input.float(10, "VWAP / Location Weight", group = gWeights)
+wVolatility    = input.float(5, "Volatility Weight", group = gWeights)
+wHTF           = input.float(3, "HTF Confirmation Weight", group = gWeights)
+
+gSignal        = "Signal Thresholds & Risk:Reward"
+thWeak         = input.int(40, "WEAK threshold (score ≥)", group = gSignal)
+thModerate     = input.int(55, "MODERATE threshold (score ≥)", group = gSignal)
+thStrong       = input.int(70, "STRONG threshold (score ≥)", group = gSignal)
+thHighConv     = input.int(85, "HIGH CONVICTION threshold (score ≥)", group = gSignal)
+minGapBetween  = input.int(10, "Min Score Gap Between Bull/Bear (else NO TRADE)", group = gSignal)
+chopMinScore   = input.int(85, "Minimum Score Required In Choppy Regime", group = gSignal)
+minRRInput     = input.string("1:2", "Minimum Risk:Reward", options = ["1:1.5", "1:2", "1:2.5", "1:3", "1:4"], group = gSignal)
+
+// ---- Signal Confirmation (Strong / Verified Only) -----------------------------
+gConfirm       = "Signal Confirmation (Strong / Verified Only)"
+minTradableClassInput = input.string("STRONG", "Minimum Tradable Class", options = ["MODERATE", "STRONG", "HIGH CONVICTION"], group = gConfirm,
+     tooltip = "Signals below this confluence class are never issued as BUY/SELL, however the raw 0-100 score comes out. STRONG (>=70) is the recommended floor for a fast 5m chart.")
+confirmBarsInput = input.int(2, "Consecutive Confirmed Bars Required", minval = 1, maxval = 5, group = gConfirm,
+     tooltip = "The winning side must stay above the confluence bar for this many consecutive CLOSED bars before a signal is allowed to fire. Higher = fewer, more 'verified' signals, at the cost of a little extra lag. 1 = off (original one-bar-confirm behaviour).")
+
+gRisk          = "Stops & Targets"
+stopMethodInput = input.string("Structure + ATR Hybrid", "Stop-Loss Method",
+     options = ["Structure + ATR Hybrid", "Structure", "ATR", "FVG Invalidation", "Swing High/Low"], group = gRisk)
+atrStopMult    = input.float(1.5, "ATR Stop Multiple", group = gRisk)
+hybridMinAtrMult = input.float(0.6, "Hybrid Minimum Stop Distance (x ATR)", group = gRisk)
+t2ExtraR       = input.float(1.0, "Target 2 = Target1-R + this many R", group = gRisk)
+t3ExtraR       = input.float(2.5, "Target 3 = Target1-R + this many R", group = gRisk)
+extAtrMult     = input.float(2.5, "Extended-Price Filter (x ATR from Fast EMA)", group = gRisk)
+
+gPos           = "Position Size Calculator"
+riskPctInput   = input.float(1.0, "Max Risk per Trade (% of current equity)", group = gPos)
+
+gProtect       = "Overtrading & Liquidity Protection"
+maxTradesDay   = input.int(3, "Max Trades per Day", minval = 1, group = gProtect)
+cooldownBars   = input.int(5, "Cooldown Bars After a Losing Trade", minval = 0, group = gProtect)
+maxConsecLoss  = input.int(2, "Max Consecutive Losses per Day", minval = 1, group = gProtect)
+maxDailyLossPct = input.float(2.0, "Max Daily Loss (% of day-start equity)", group = gProtect)
+minAvgVolFilter = input.float(0, "Minimum 20-bar Average Volume (0 = off)", group = gProtect)
+liqDegradeRatio = input.float(0.3, "Liquidity Degradation Floor (20-bar vs 100-bar avg vol)", group = gProtect)
+
+gAlerts        = "Alerts"
+showEarlySignals = input.bool(false, "Show Live/Unconfirmed Signals", group = gAlerts)
+enableAlertsInput = input.bool(true, "Enable Alert Firing", group = gAlerts)
+
+gDisp          = "Display"
+showDashboard  = input.bool(true, "Show Dashboard", group = gDisp)
+dashPosInput   = input.string("Top Right", "Dashboard Position",
+     options = ["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group = gDisp)
+showFVGInput   = input.bool(true, "Show FVG Boxes", group = gDisp)
+showStructInput = input.bool(true, "Show Structure Labels (BOS/CHoCH/MSS)", group = gDisp)
+showLiqInput   = input.bool(true, "Show Liquidity Levels", group = gDisp)
+showSRInput    = input.bool(true, "Show Support/Resistance", group = gDisp)
+showVWAPInput  = input.bool(true, "Show VWAP", group = gDisp)
+showORInput    = input.bool(true, "Show Opening Range", group = gDisp)
+showPatternInput = input.bool(true, "Show Pattern Labels", group = gDisp)
+showSignalsInput = input.bool(true, "Show Buy/Sell Markers", group = gDisp)
+
+// ---- Backtest Engine (strategy-only) ----------------------------------------
+gBT            = "Backtest Engine"
+backtestStartInput = input.time(timestamp("2015-01-01T00:00"), "Backtest Window Start", group = gBT,
+     tooltip = "Use this together with the End date to separate development / validation / out-of-sample periods. See User Guide Part: Walk-Forward Thinking.")
+backtestEndInput   = input.time(timestamp("2100-01-01T00:00"), "Backtest Window End", group = gBT)
+
+// ---- Trade Management (strategy-only) ---------------------------------------
+gTM            = "Trade Management"
+trailMethodInput = input.string("ATR", "Trailing Stop Method", options = ["None", "ATR", "EMA", "Structure"], group = gTM)
+trailAtrMultInput = input.float(2.0, "ATR Trailing Multiple", group = gTM)
+trailActivateRInput = input.float(2.0, "Activate Trailing After (R)", group = gTM)
+breakevenEnableInput = input.bool(true, "Move Stop to Breakeven", group = gTM)
+breakevenAtRInput = input.float(1.0, "Breakeven Trigger (R)", group = gTM)
+partialExitEnableInput = input.bool(true, "Partial Exit at Target 1 (remainder rides to Target 2)", group = gTM)
+partial1PctInput = input.int(50, "Partial Exit % at Target 1", minval = 10, maxval = 90, group = gTM)
+
+// #############################################################################
+// SECTION 2 — SMALL UTILITIES
+// #############################################################################
+
+f_safeDiv(_num, _den) =>
+    _den == 0.0 or na(_den) ? na : _num / _den
+
+f_hhmmToMinutes(_s) =>
+    math.floor(str.tonumber(_s) / 100) * 60 + str.tonumber(_s) % 100
+
+f_rrFromString(_s) =>
+    float _r = switch _s
+        "1:1.5" => 1.5
+        "1:2"   => 2.0
+        "1:2.5" => 2.5
+        "1:3"   => 3.0
+        "1:4"   => 4.0
+        => 2.0
+    _r
+
+minRRValue = f_rrFromString(minRRInput)
+
+f_autoHTF() =>
+    float chSec = timeframe.in_seconds(timeframe.period)
+    string _htf = chSec <= 60 * 15 ? "60" : chSec <= 60 * 60 ? "240" : chSec <= 60 * 240 ? "D" : "W"
+    _htf
+
+htfString = htfOverrideTF == "" ? f_autoHTF() : htfOverrideTF
+
+dashPos = switch dashPosInput
+    "Top Right"    => position.top_right
+    "Top Left"     => position.top_left
+    "Bottom Right" => position.bottom_right
+    => position.bottom_left
+
+// #############################################################################
+// SECTION 3 — DAILY ANCHOR, DAILY REFERENCE RANGE, ACTIVE HOURS & WEEKLY CLOSE
+// #############################################################################
+// Gold trades roughly Sun 22:00 UTC -> Fri 22:00 UTC (exact times vary by
+// broker), so there is no single NSE-style open/close window. A configurable
+// UTC "daily anchor" instead defines where each trading day resets for VWAP /
+// the Daily Reference Range / gap detection; "Active Hours" is a separate,
+// optional signal-QUALITY gate (it does not claim the market is closed
+// outside it); "Weekly Close Protection" avoids new intraday risk right
+// before the Friday close / weekend gap window.
+
+f_dateKeyUTC(_t) =>
+    year(_t, "UTC") * 10000 + month(_t, "UTC") * 100 + dayofmonth(_t, "UTC")
+
+anchorMinutes  = f_hhmmToMinutes(dailyAnchorInput)
+utcMinutesNow  = hour(time, "UTC") * 60 + minute(time, "UTC")
+shiftedTime    = time - anchorMinutes * 60000
+tradingDateKey = f_dateKeyUTC(shiftedTime)
+newSessionDay  = tradingDateKey != tradingDateKey[1]
+
+var float sessionStartTime = na
+if newSessionDay
+    sessionStartTime := time
+
+minutesSinceOpen = not na(sessionStartTime) ? (time - sessionStartTime) / 60000.0 : na
+
+inOpenProtection = not allowImmediateOpen and not na(minutesSinceOpen) and minutesSinceOpen < openProtectMin
+inOpeningRangeWindow = not na(minutesSinceOpen) and minutesSinceOpen < orMinutesInput
+
+var float orHigh = na
+var float orLow  = na
+if newSessionDay
+    orHigh := high
+    orLow  := low
+else if inOpeningRangeWindow
+    orHigh := math.max(orHigh, high)
+    orLow  := math.min(orLow, low)
+
+orFormed = not na(orHigh) and not inOpeningRangeWindow
+
+inActiveHours = not na(time(timeframe.period, activeHoursSession, "UTC"))
+activeHoursOk = not useActiveHoursFilter or inActiveHours
+
+fridayCloseMinutes = f_hhmmToMinutes(fridayCloseInput)
+isFriday      = dayofweek(time, "UTC") == dayofweek.friday
+pastEODCutoff = isFriday and utcMinutesNow >= (fridayCloseMinutes - weekendProtectHoursInput * 60)
+
+// #############################################################################
+// SECTION 4 — DAILY / WEEKLY LEVELS & GAP (non-repainting: previous, CLOSED bar)
+// #############################################################################
+
+[pdh, pdl, dayOpen, prevDayClose, dailyAtr] = request.security(syminfo.tickerid, "D",
+     [high[1], low[1], open, close[1], ta.atr(14)[1]], lookahead = barmerge.lookahead_off)
+
+[pwh, pwl] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_off)
+
+// #############################################################################
+// SECTION 5 — HIGHER-TIMEFRAME BIAS (non-repainting: offset + lookahead_on)
+// #############################################################################
+
+f_adx(_len) =>
+    _up = ta.change(high)
+    _down = -ta.change(low)
+    _plusDM = na(_up) ? na : (_up > _down and _up > 0 ? _up : 0.0)
+    _minusDM = na(_down) ? na : (_down > _up and _down > 0 ? _down : 0.0)
+    _trur = ta.rma(ta.tr(true), _len)
+    _plusDI = 100 * ta.rma(_plusDM, _len) / _trur
+    _minusDI = 100 * ta.rma(_minusDM, _len) / _trur
+    _sumDI = _plusDI + _minusDI
+    _adxVal = 100 * ta.rma(_sumDI == 0 ? 0.0 : math.abs(_plusDI - _minusDI) / _sumDI, _len)
+    [_adxVal, _plusDI, _minusDI]
+
+f_htfContext() =>
+    _e20 = ta.ema(close, emaFastLen)
+    _e50 = ta.ema(close, emaMedLen)
+    _e200 = ta.ema(close, emaSlowLen)
+    [_adxVal, _plusDI, _minusDI] = f_adx(adxLen)
+    _biasScore = (_e20 > _e50 ? 1 : -1) + (_e50 > _e200 ? 1 : -1) + (close > _e20 ? 1 : -1)
+    [_e20[1], _e50[1], _e200[1], _adxVal[1], _biasScore[1]]
+
+[htfEma20, htfEma50, htfEma200, htfAdx, htfBiasScore] = request.security(syminfo.tickerid, htfString, f_htfContext(), lookahead = barmerge.lookahead_on)
+
+htfBias = htfBiasScore >= 2 ? 1 : htfBiasScore <= -2 ? -1 : 0
+htfBiasLabel = htfBias == 1 ? "BULLISH" : htfBias == -1 ? "BEARISH" : "NEUTRAL"
+htfTrendStrong = htfAdx >= adxStrongTh
+
+// #############################################################################
+// SECTION 6 — TREND ENGINE
+// #############################################################################
+
+emaFast = ta.ema(close, emaFastLen)
+emaMed  = ta.ema(close, emaMedLen)
+emaSlow = ta.ema(close, emaSlowLen)
+
+emaAlignBull = (close > emaFast ? 1 : 0) + (emaFast > emaMed ? 1 : 0) + (emaMed > emaSlow ? 1 : 0)
+emaAlignBear = (close < emaFast ? 1 : 0) + (emaFast < emaMed ? 1 : 0) + (emaMed < emaSlow ? 1 : 0)
+
+emaFastSlopeUp   = emaFast > emaFast[slopeLookback]
+emaFastSlopeDown = emaFast < emaFast[slopeLookback]
+
+[adxVal, plusDI, minusDI] = f_adx(adxLen)
+
+// #############################################################################
+// SECTION 7 — VOLATILITY ENGINE
+// #############################################################################
+
+atrVal   = ta.atr(atrLen)
+atrPct   = f_safeDiv(atrVal, close) * 100
+atrAvg50 = ta.sma(atrVal, 50)
+volExpansion   = atrVal > atrAvg50 * atrExpMult
+volContraction = atrVal < atrAvg50 * atrConMult
+atrPctileRank  = ta.percentrank(atrVal, volPctileLen)
+isSqueeze      = atrPctileRank < squeezeTh
+isExtremeVol   = atrPctileRank > extremeVolTh
+
+// #############################################################################
+// SECTION 8 — VOLUME ENGINE (basic measures)
+// #############################################################################
+
+avgVolume = ta.sma(volume, rvolLen)
+rvol      = f_safeDiv(volume, avgVolume)
+
+rvolClass = na(rvol) ? "N/A" : rvol < rvolLow ? "LOW ACTIVITY" : rvol < rvolNormalHi ? "NORMAL" :
+     rvol < rvolElevatedHi ? "ELEVATED" : rvol < rvolStrongHi ? "STRONG" : "EXTREME"
+
+volAvg100 = ta.sma(volume, 100)
+liquidityDegraded = not na(volAvg100) and volAvg100 > 0 and f_safeDiv(avgVolume, volAvg100) < liqDegradeRatio
+noVolumeData = na(avgVolume) or avgVolume == 0
+instrumentIlliquid = liquidityDegraded or (minAvgVolFilter > 0 and avgVolume < minAvgVolFilter) or noVolumeData
+
+priceUp   = close > open
+priceDown = close < open
+volRising  = volume > avgVolume
+volFalling = volume < avgVolume
+
+pvRelation =
+     priceUp and volRising and rvol >= rvolNormalHi ? "BULLISH PARTICIPATION" :
+     priceUp and volFalling ? "WEAK UP-MOVE (LOW VOL)" :
+     priceDown and volRising and rvol >= rvolNormalHi ? "BEARISH PARTICIPATION" :
+     priceDown and volFalling ? "WEAKENING SELLING (LOW VOL)" :
+     "NEUTRAL"
+
+volumeSpike = rvol >= rvolStrongHi
+volumeDryUp = rvol < rvolLow
+
+// #############################################################################
+// SECTION 9 — VWAP ENGINE (manual session-anchored, resets each session)
+// #############################################################################
+
+var float cumPV  = 0.0
+var float cumVol = 0.0
+var float cumPV2 = 0.0
+
+if newSessionDay
+    cumPV  := 0.0
+    cumVol := 0.0
+    cumPV2 := 0.0
+
+vwapSrc = hlc3
+cumPV  += vwapSrc * volume
+cumVol += volume
+cumPV2 += volume * vwapSrc * vwapSrc
+
+sessionVwap = cumVol > 0 ? cumPV / cumVol : na
+vwapVariance = cumVol > 0 ? math.max(cumPV2 / cumVol - sessionVwap * sessionVwap, 0) : na
+vwapStdev = na(vwapVariance) ? na : math.sqrt(vwapVariance)
+
+vwapUpper1 = na(sessionVwap) ? na : sessionVwap + vwapStdev * vwapBandMult1
+vwapLower1 = na(sessionVwap) ? na : sessionVwap - vwapStdev * vwapBandMult1
+vwapUpper2 = na(sessionVwap) ? na : sessionVwap + vwapStdev * vwapBandMult2
+vwapLower2 = na(sessionVwap) ? na : sessionVwap - vwapStdev * vwapBandMult2
+
+priceAboveVwap = not na(sessionVwap) and close > sessionVwap
+priceBelowVwap = not na(sessionVwap) and close < sessionVwap
+vwapSlopeUp    = not na(sessionVwap) and not na(sessionVwap[vwapSlopeLen]) and sessionVwap > sessionVwap[vwapSlopeLen]
+vwapSlopeDown  = not na(sessionVwap) and not na(sessionVwap[vwapSlopeLen]) and sessionVwap < sessionVwap[vwapSlopeLen]
+vwapReclaim    = not na(sessionVwap) and ta.crossover(close, sessionVwap)
+vwapRejection  = not na(sessionVwap) and ta.crossunder(close, sessionVwap)
+
+// #############################################################################
+// SECTION 10 — MARKET STRUCTURE ENGINE (swings, HH/HL/LH/LL, BOS/CHoCH/MSS)
+// #############################################################################
+
+pHigh = ta.pivothigh(high, swingSens, swingSens)
+pLow  = ta.pivotlow(low, swingSens, swingSens)
+
+var float lastPH = na
+var float prevPH = na
+var float lastPL = na
+var float prevPL = na
+var int   lastPHBar = na
+var int   lastPLBar = na
+
+var array<float> phPrices = array.new<float>()
+var array<int>   phBars   = array.new<int>()
+var array<float> phVols   = array.new<float>()
+var array<float> plPrices = array.new<float>()
+var array<int>   plBars   = array.new<int>()
+var array<float> plVols   = array.new<float>()
+
+if not na(pHigh)
+    prevPH := lastPH
+    lastPH := pHigh
+    lastPHBar := bar_index - swingSens
+    array.push(phPrices, pHigh)
+    array.push(phBars, bar_index - swingSens)
+    array.push(phVols, volume[swingSens])
+    if array.size(phPrices) > patternLookback
+        array.shift(phPrices)
+        array.shift(phBars)
+        array.shift(phVols)
+
+if not na(pLow)
+    prevPL := lastPL
+    lastPL := pLow
+    lastPLBar := bar_index - swingSens
+    array.push(plPrices, pLow)
+    array.push(plBars, bar_index - swingSens)
+    array.push(plVols, volume[swingSens])
+    if array.size(plPrices) > patternLookback
+        array.shift(plPrices)
+        array.shift(plBars)
+        array.shift(plVols)
+
+highsRising  = not na(lastPH) and not na(prevPH) and lastPH > prevPH
+highsFalling = not na(lastPH) and not na(prevPH) and lastPH < prevPH
+lowsRising   = not na(lastPL) and not na(prevPL) and lastPL > prevPL
+lowsFalling  = not na(lastPL) and not na(prevPL) and lastPL < prevPL
+
+var int structBias = 0
+if highsRising and lowsRising
+    structBias := 1
+else if highsFalling and lowsFalling
+    structBias := -1
+
+structBiasChanged = structBias != structBias[1]
+
+bosUp     = structBias == 1  and not na(lastPH) and ta.crossover(close, lastPH)
+bosDown   = structBias == -1 and not na(lastPL) and ta.crossunder(close, lastPL)
+chochUp   = structBias == -1 and not na(lastPH) and ta.crossover(close, lastPH)
+chochDown = structBias == 1  and not na(lastPL) and ta.crossunder(close, lastPL)
+mssUp     = structBiasChanged and structBias == 1
+mssDown   = structBiasChanged and structBias == -1
+
+var string lastStructEvent = "NONE"
+var int lastStructEventBar = na
+if mssUp
+    lastStructEvent := "MSS (Bullish)"
+    lastStructEventBar := bar_index
+else if mssDown
+    lastStructEvent := "MSS (Bearish)"
+    lastStructEventBar := bar_index
+else if chochUp
+    lastStructEvent := "CHoCH (Bullish)"
+    lastStructEventBar := bar_index
+else if chochDown
+    lastStructEvent := "CHoCH (Bearish)"
+    lastStructEventBar := bar_index
+else if bosUp
+    lastStructEvent := "BOS (Bullish)"
+    lastStructEventBar := bar_index
+else if bosDown
+    lastStructEvent := "BOS (Bearish)"
+    lastStructEventBar := bar_index
+
+structStrength = (highsRising and lowsRising) or (highsFalling and lowsFalling) ? 1.0 : 0.5
+
+// #############################################################################
+// SECTION 11 — LIQUIDITY ENGINE
+// #############################################################################
+
+f_hasEqualLevel(_arr, _price, _tol) =>
+    bool _found = false
+    if array.size(_arr) > 1
+        for i = 0 to array.size(_arr) - 2
+            if math.abs(array.get(_arr, i) - _price) <= _tol
+                _found := true
+    _found
+
+eqTol = atrVal * eqTolMult
+equalHighs = not na(pHigh) and f_hasEqualLevel(phPrices, pHigh, eqTol)
+equalLows  = not na(pLow) and f_hasEqualLevel(plPrices, pLow, eqTol)
+
+buySideLevel  = na(lastPH) ? pdh : math.min(lastPH, pdh)
+sellSideLevel = na(lastPL) ? pdl : math.max(lastPL, pdl)
+
+intrusion = atrVal * sweepIntrusion
+
+var float lastSweptSellLevel = na
+var float lastSweptBuyLevel  = na
+
+sellSideSweptRaw = not na(sellSideLevel) and low < sellSideLevel - intrusion
+buySideSweptRaw  = not na(buySideLevel)  and high > buySideLevel + intrusion
+
+sellSideSweptThisBar = sellSideSweptRaw and (na(lastSweptSellLevel) or math.abs(sellSideLevel - lastSweptSellLevel) > eqTol)
+buySideSweptThisBar  = buySideSweptRaw  and (na(lastSweptBuyLevel)  or math.abs(buySideLevel  - lastSweptBuyLevel)  > eqTol)
+
+if sellSideSweptThisBar
+    lastSweptSellLevel := sellSideLevel
+if buySideSweptThisBar
+    lastSweptBuyLevel := buySideLevel
+
+sellSideReject = sellSideSweptThisBar and close > sellSideLevel
+buySideReject  = buySideSweptThisBar  and close < buySideLevel
+
+liquidityStatusLabel =
+     sellSideReject ? "SELL-SIDE SWEPT & RECLAIMED" :
+     buySideReject  ? "BUY-SIDE SWEPT & REJECTED" :
+     sellSideSweptThisBar ? "SELL-SIDE SWEEP (IN PROGRESS)" :
+     buySideSweptThisBar  ? "BUY-SIDE SWEEP (IN PROGRESS)" :
+     "NO RECENT SWEEP"
+
+// #############################################################################
+// SECTION 12 — FAIR VALUE GAP ENGINE
+// #############################################################################
+
+fvgMinSize = atrVal * fvgMinAtrMult
+
+bullFvgRaw = low > high[2] and (low - high[2]) >= fvgMinSize
+bearFvgRaw = high < low[2] and (low[2] - high) >= fvgMinSize
+
+var array<float> fvgTop      = array.new<float>()
+var array<float> fvgBottom   = array.new<float>()
+var array<int>   fvgBarIdx   = array.new<int>()
+var array<int>   fvgDir      = array.new<int>()
+var array<int>   fvgStatus   = array.new<int>()
+var array<box>   fvgBoxes    = array.new<box>()
+var array<bool>  fvgAfterSweep = array.new<bool>()
+
+freshBullFvgThisBar = false
+freshBearFvgThisBar = false
+
+if bullFvgRaw
+    freshBullFvgThisBar := true
+    array.push(fvgTop, low)
+    array.push(fvgBottom, high[2])
+    array.push(fvgBarIdx, bar_index)
+    array.push(fvgDir, 1)
+    array.push(fvgStatus, 0)
+    array.push(fvgAfterSweep, sellSideReject or (bar_index - nz(lastStructEventBar, -1000) <= 3 and lastStructEvent == "MSS (Bullish)"))
+    if showFVGInput
+        array.push(fvgBoxes, box.new(bar_index - 2, high[2], bar_index + 1, low, border_color = color.new(color.teal, 40),
+             bgcolor = color.new(color.teal, 85), extend = extend.none))
+    else
+        array.push(fvgBoxes, na)
+
+if bearFvgRaw
+    freshBearFvgThisBar := true
+    array.push(fvgTop, low[2])
+    array.push(fvgBottom, high)
+    array.push(fvgBarIdx, bar_index)
+    array.push(fvgDir, -1)
+    array.push(fvgStatus, 0)
+    array.push(fvgAfterSweep, buySideReject or (bar_index - nz(lastStructEventBar, -1000) <= 3 and lastStructEvent == "MSS (Bearish)"))
+    if showFVGInput
+        array.push(fvgBoxes, box.new(bar_index - 2, low[2], bar_index + 1, high, border_color = color.new(color.maroon, 40),
+             bgcolor = color.new(color.maroon, 85), extend = extend.none))
+    else
+        array.push(fvgBoxes, na)
+
+float nearestFreshBullTop = na
+float nearestFreshBullBottom = na
+float nearestFreshBearTop = na
+float nearestFreshBearBottom = na
+bool bullFvgAvailable = false
+bool bearFvgAvailable = false
+bool bullFvgFromSweep = false
+bool bearFvgFromSweep = false
+
+if array.size(fvgTop) > 0
+    for i = array.size(fvgTop) - 1 to 0
+        top = array.get(fvgTop, i)
+        bot = array.get(fvgBottom, i)
+        dir = array.get(fvgDir, i)
+        st  = array.get(fvgStatus, i)
+        if st < 2
+            if dir == 1 and mssDown
+                array.set(fvgStatus, i, 3)
+            else if dir == -1 and mssUp
+                array.set(fvgStatus, i, 3)
+            else if dir == 1
+                if fvgFullCloseReq ? close < bot : low < bot
+                    array.set(fvgStatus, i, 2)
+                else if low <= top
+                    array.set(fvgStatus, i, 1)
+            else
+                if fvgFullCloseReq ? close > top : high > top
+                    array.set(fvgStatus, i, 2)
+                else if high >= bot
+                    array.set(fvgStatus, i, 1)
+        stNow = array.get(fvgStatus, i)
+        bx = array.get(fvgBoxes, i)
+        if not na(bx)
+            if stNow < 2
+                box.set_right(bx, bar_index + 1)
+            box.set_bgcolor(bx, stNow == 0 ? color.new(dir == 1 ? color.teal : color.maroon, 85) : stNow == 3 ? color.new(color.gray, 90) : color.new(dir == 1 ? color.teal : color.maroon, 93))
+        if stNow < 2 and dir == 1 and na(nearestFreshBullTop)
+            nearestFreshBullTop := top
+            nearestFreshBullBottom := bot
+            bullFvgAvailable := true
+            bullFvgFromSweep := array.get(fvgAfterSweep, i)
+        if stNow < 2 and dir == -1 and na(nearestFreshBearTop)
+            nearestFreshBearTop := top
+            nearestFreshBearBottom := bot
+            bearFvgAvailable := true
+            bearFvgFromSweep := array.get(fvgAfterSweep, i)
+
+    while array.size(fvgTop) > fvgMaxTracked
+        oldBox = array.shift(fvgBoxes)
+        if not na(oldBox)
+            box.delete(oldBox)
+        array.shift(fvgTop)
+        array.shift(fvgBottom)
+        array.shift(fvgBarIdx)
+        array.shift(fvgDir)
+        array.shift(fvgStatus)
+        array.shift(fvgAfterSweep)
+
+// #############################################################################
+// SECTION 13 — LIQUIDITY SHIFT ENGINE (sweep → reclaim → displacement → MSS → FVG)
+// #############################################################################
+
+bodySize = math.abs(close - open)
+barRange = high - low
+bodyPctOfRange = f_safeDiv(bodySize, barRange)
+isDisplacementUp   = bodySize >= atrVal * dispAtrMult and not na(bodyPctOfRange) and bodyPctOfRange >= dispBodyPct and close > open
+isDisplacementDown = bodySize >= atrVal * dispAtrMult and not na(bodyPctOfRange) and bodyPctOfRange >= dispBodyPct and close < open
+
+var int   lsStage    = 0
+var int   lsDir      = 0
+var int   lsStageBar = 0
+var float lsSweptLevel = na
+
+if lsStage > 0 and (bar_index - lsStageBar) > liqShiftMaxBars
+    lsStage := 0
+    lsDir := 0
+
+if sellSideSweptThisBar
+    lsStage := 1
+    lsDir := 1
+    lsStageBar := bar_index
+    lsSweptLevel := sellSideLevel
+else if buySideSweptThisBar
+    lsStage := 1
+    lsDir := -1
+    lsStageBar := bar_index
+    lsSweptLevel := buySideLevel
+
+if lsStage == 1 and lsDir == 1 and not na(lsSweptLevel) and close > lsSweptLevel
+    lsStage := 2
+    lsStageBar := bar_index
+if lsStage == 1 and lsDir == -1 and not na(lsSweptLevel) and close < lsSweptLevel
+    lsStage := 2
+    lsStageBar := bar_index
+
+if lsStage == 2 and lsDir == 1 and isDisplacementUp
+    lsStage := 3
+    lsStageBar := bar_index
+if lsStage == 2 and lsDir == -1 and isDisplacementDown
+    lsStage := 3
+    lsStageBar := bar_index
+
+if lsStage == 3 and lsDir == 1 and mssUp
+    lsStage := 4
+    lsStageBar := bar_index
+if lsStage == 3 and lsDir == -1 and mssDown
+    lsStage := 4
+    lsStageBar := bar_index
+
+if lsStage == 4 and lsDir == 1 and freshBullFvgThisBar
+    lsStage := 5
+    lsStageBar := bar_index
+if lsStage == 4 and lsDir == -1 and freshBearFvgThisBar
+    lsStage := 5
+    lsStageBar := bar_index
+
+liqShiftBullActive = lsDir == 1  and lsStage >= 3
+liqShiftBearActive = lsDir == -1 and lsStage >= 3
+liqShiftBullFull    = lsDir == 1  and lsStage == 5
+liqShiftBearFull    = lsDir == -1 and lsStage == 5
+
+// #############################################################################
+// SECTION 14 — VOLUME / MOMENTUM DIVERGENCE (reuses pivot history)
+// #############################################################################
+
+rsiVal = ta.rsi(close, rsiLen)
+
+var float rsiAtLastPH = na
+var float rsiAtPrevPH = na
+var float rsiAtLastPL = na
+var float rsiAtPrevPL = na
+var float volAtLastPH = na
+var float volAtPrevPH = na
+var float volAtLastPL = na
+var float volAtPrevPL = na
+
+if not na(pHigh)
+    rsiAtPrevPH := rsiAtLastPH
+    rsiAtLastPH := rsiVal[swingSens]
+    volAtPrevPH := volAtLastPH
+    volAtLastPH := volume[swingSens]
+if not na(pLow)
+    rsiAtPrevPL := rsiAtLastPL
+    rsiAtLastPL := rsiVal[swingSens]
+    volAtPrevPL := volAtLastPL
+    volAtLastPL := volume[swingSens]
+
+bearishVolDivergence = highsRising and not na(volAtLastPH) and not na(volAtPrevPH) and volAtLastPH < volAtPrevPH
+bullishVolDivergence = lowsFalling and not na(volAtLastPL) and not na(volAtPrevPL) and volAtLastPL < volAtPrevPL
+bearishRsiDivergence = highsRising and not na(rsiAtLastPH) and not na(rsiAtPrevPH) and rsiAtLastPH < rsiAtPrevPH
+bullishRsiDivergence = lowsFalling and not na(rsiAtLastPL) and not na(rsiAtPrevPL) and rsiAtLastPL > rsiAtPrevPL
+
+anyBearishDivergence = bearishVolDivergence or bearishRsiDivergence
+anyBullishDivergence = bullishVolDivergence or bullishRsiDivergence
+
+// #############################################################################
+// SECTION 15 — MOMENTUM ENGINE
+// #############################################################################
+
+[macdLine, macdSignal, macdHist] = ta.macd(close, macdFastLen, macdSlowLen, macdSigLen)
+stochKraw = ta.stoch(close, high, low, stochLen)
+stochK = ta.sma(stochKraw, stochSmoothK)
+stochD = ta.sma(stochK, stochSmoothD)
+rocVal = ta.roc(close, rocLen)
+rocAvgAbs = ta.sma(math.abs(rocVal), 20)
+
+rsiScore   = (rsiVal - 50) / 50
+stochScore = (stochK - 50) / 50
+macdScore  = macdHist > 0 ? (macdHist > macdHist[1] ? 1.0 : 0.5) : (macdHist < macdHist[1] ? -1.0 : -0.5)
+rocScore   = rocAvgAbs > 0 ? math.max(-1.0, math.min(1.0, rocVal / rocAvgAbs)) : 0.0
+
+momentumRaw = (rsiScore + stochScore + macdScore + rocScore) / 4
+momentumDirection = momentumRaw > 0.15 ? "BULLISH" : momentumRaw < -0.15 ? "BEARISH" : "NEUTRAL"
+momentumStrength = math.abs(momentumRaw)
+momentumRising = momentumRaw > momentumRaw[3]
+
+// #############################################################################
+// SECTION 16 — GAP ENGINE
+// #############################################################################
+
+gapPct = f_safeDiv(dayOpen - prevDayClose, prevDayClose) * 100
+gapSize = math.abs(dayOpen - prevDayClose)
+isGapUp   = dayOpen > prevDayClose
+isGapDown = dayOpen < prevDayClose
+gapMagnitude = na(dailyAtr) or dailyAtr == 0 ? "N/A" :
+     gapSize < dailyAtr * gapSmallMult ? "SMALL" :
+     gapSize < dailyAtr * gapLargeMult ? "MODERATE" : "LARGE"
+
+gapClassification =
+     not (isGapUp or isGapDown) ? "NO GAP" :
+     isGapUp and close > dayOpen and priceAboveVwap ? "GAP UP — CONTINUATION" :
+     isGapUp and close < dayOpen ? "GAP UP — FADING/FILLING" :
+     isGapDown and close < dayOpen and priceBelowVwap ? "GAP DOWN — CONTINUATION" :
+     isGapDown and close > dayOpen ? "GAP DOWN — FADING/FILLING" :
+     (isGapUp ? "GAP UP" : "GAP DOWN")
+
+// #############################################################################
+// SECTION 17 — OPENING RANGE BREAKOUT CLASSIFICATION
+// #############################################################################
+
+orbBreakoutRaw   = orFormed and not na(orHigh) and ta.crossover(close, orHigh)
+orbBreakdownRaw  = orFormed and not na(orLow)  and ta.crossunder(close, orLow)
+orbConfirmedBreakout  = orbBreakoutRaw  and rvol >= rvolNormalHi and (bosUp or structBias == 1)
+orbConfirmedBreakdown = orbBreakdownRaw and rvol >= rvolNormalHi and (bosDown or structBias == -1)
+orbLowVolWarning = (orbBreakoutRaw and rvol < rvolNormalHi) or (orbBreakdownRaw and rvol < rvolNormalHi)
+
+var float orbRetestLevel = na
+var int orbRetestDir = 0
+var int orbBreakoutBar = na
+if orbBreakoutRaw
+    orbRetestLevel := orHigh
+    orbRetestDir := 1
+    orbBreakoutBar := bar_index
+if orbBreakdownRaw
+    orbRetestLevel := orLow
+    orbRetestDir := -1
+    orbBreakoutBar := bar_index
+orbRetest = not na(orbRetestLevel) and orbRetestDir == 1 and low <= orbRetestLevel and close > orbRetestLevel and
+     not na(orbBreakoutBar) and (bar_index - orbBreakoutBar) < 20 and (bar_index - orbBreakoutBar) > 0
+orbFalseBreakout = orFormed and not na(orHigh) and high > orHigh and close < orHigh and rvol < rvolNormalHi
+
+lowVolumeBreakoutWarning = (bosUp or bosDown or orbBreakoutRaw or orbBreakdownRaw) and rvol < rvolNormalHi
+
+orbStatusLabel = not orFormed ? "FORMING" :
+     orbFalseBreakout ? "FALSE BREAKOUT" :
+     orbConfirmedBreakout ? "CONFIRMED BREAKOUT" :
+     orbConfirmedBreakdown ? "CONFIRMED BREAKDOWN" :
+     orbLowVolWarning ? "LOW-VOLUME BREAKOUT — CAUTION" :
+     orbRetest ? "RETEST OF ORH" :
+     "INSIDE RANGE"
+
+// #############################################################################
+// SECTION 18 — CANDLESTICK PATTERN ENGINE (shows strongest match only)
+// #############################################################################
+
+body   = math.abs(close - open)
+range_ = high - low
+upperWick = high - math.max(close, open)
+lowerWick = math.min(close, open) - low
+bodyPct = f_safeDiv(body, range_)
+
+isBullEngulf = close > open and close[1] < open[1] and close >= open[1] and open <= close[1] and body > math.abs(close[1] - open[1])
+isBearEngulf = close < open and close[1] > open[1] and close <= open[1] and open >= close[1] and body > math.abs(close[1] - open[1])
+isHammer     = not na(bodyPct) and bodyPct < 0.4 and lowerWick > body * wickBodyRatio and upperWick < body * 0.6 and close > low + range_ * 0.5
+isShootingStar = not na(bodyPct) and bodyPct < 0.4 and upperWick > body * wickBodyRatio and lowerWick < body * 0.6 and close < low + range_ * 0.5
+isDoji       = not na(bodyPct) and bodyPct <= dojiBodyPct
+isMarubozuBull = not na(bodyPct) and bodyPct >= marubozuBodyPct and close > open
+isMarubozuBear = not na(bodyPct) and bodyPct >= marubozuBodyPct and close < open
+isInsideBar  = high < high[1] and low > low[1]
+isOutsideBar = high > high[1] and low < low[1]
+isPinBarBull = not na(bodyPct) and bodyPct < 0.35 and lowerWick > (upperWick + body) and lowerWick > body * wickBodyRatio
+isPinBarBear = not na(bodyPct) and bodyPct < 0.35 and upperWick > (lowerWick + body) and upperWick > body * wickBodyRatio
+isMorningStar = close[2] < open[2] and bodyPct[1] < 0.3 and close > open and close > (open[2] + close[2]) / 2 and low[1] < math.min(low[2], low)
+isEveningStar = close[2] > open[2] and bodyPct[1] < 0.3 and close < open and close < (open[2] + close[2]) / 2 and high[1] > math.max(high[2], high)
+isThreeBarReversalBull = low < low[1] and low < low[2] and close > high[1]
+isThreeBarReversalBear = high > high[1] and high > high[2] and close < low[1]
+
+candlePattern =
+     isMorningStar ? "MORNING STAR" :
+     isEveningStar ? "EVENING STAR" :
+     isBullEngulf ? "BULLISH ENGULFING" :
+     isBearEngulf ? "BEARISH ENGULFING" :
+     isThreeBarReversalBull ? "THREE-BAR REVERSAL (BULL)" :
+     isThreeBarReversalBear ? "THREE-BAR REVERSAL (BEAR)" :
+     isHammer ? "HAMMER" :
+     isShootingStar ? "SHOOTING STAR" :
+     isMarubozuBull ? "BULLISH MARUBOZU" :
+     isMarubozuBear ? "BEARISH MARUBOZU" :
+     isPinBarBull ? "BULLISH PIN BAR" :
+     isPinBarBear ? "BEARISH PIN BAR" :
+     isOutsideBar ? "OUTSIDE BAR" :
+     isInsideBar ? "INSIDE BAR" :
+     isDoji ? "DOJI" :
+     "NONE"
+
+candleBias = switch candlePattern
+    "MORNING STAR" => "BULLISH"
+    "BULLISH ENGULFING" => "BULLISH"
+    "THREE-BAR REVERSAL (BULL)" => "BULLISH"
+    "HAMMER" => "BULLISH"
+    "BULLISH MARUBOZU" => "BULLISH"
+    "BULLISH PIN BAR" => "BULLISH"
+    "EVENING STAR" => "BEARISH"
+    "BEARISH ENGULFING" => "BEARISH"
+    "THREE-BAR REVERSAL (BEAR)" => "BEARISH"
+    "SHOOTING STAR" => "BEARISH"
+    "BEARISH MARUBOZU" => "BEARISH"
+    "BEARISH PIN BAR" => "BEARISH"
+    => "NEUTRAL"
+
+// #############################################################################
+// SECTION 19 — CLASSIC CHART PATTERN ENGINE (conservative pivot-based heuristics)
+// #############################################################################
+
+f_pctDiff(_a, _b) =>
+    100 * math.abs(_a - _b) / math.max(math.abs(_a), math.abs(_b))
+
+var string chartPattern = "NONE"
+var string chartPatternStatus = "NONE"
+var string chartPatternBias = "NEUTRAL"
+
+nPH = array.size(phPrices)
+nPL = array.size(plPrices)
+
+bool foundPattern = false
+string foundName = "NONE"
+string foundStatus = "NONE"
+string foundBias = "NEUTRAL"
+
+if not foundPattern and nPH >= 2 and nPL >= 1
+    h1 = array.get(phPrices, nPH - 2)
+    h2 = array.get(phPrices, nPH - 1)
+    if f_pctDiff(h1, h2) <= patternTolPct
+        neckline = array.get(plPrices, nPL - 1)
+        if close < neckline
+            foundPattern := true
+            foundName := "DOUBLE TOP"
+            foundStatus := "CONFIRMED"
+            foundBias := "BEARISH"
+        else if high < math.max(h1, h2) * 1.002
+            foundPattern := true
+            foundName := "DOUBLE TOP"
+            foundStatus := "FORMING"
+            foundBias := "BEARISH"
+
+if not foundPattern and nPL >= 2 and nPH >= 1
+    l1 = array.get(plPrices, nPL - 2)
+    l2 = array.get(plPrices, nPL - 1)
+    if f_pctDiff(l1, l2) <= patternTolPct
+        neckline = array.get(phPrices, nPH - 1)
+        if close > neckline
+            foundPattern := true
+            foundName := "DOUBLE BOTTOM"
+            foundStatus := "CONFIRMED"
+            foundBias := "BULLISH"
+        else if low > math.min(l1, l2) * 0.998
+            foundPattern := true
+            foundName := "DOUBLE BOTTOM"
+            foundStatus := "FORMING"
+            foundBias := "BULLISH"
+
+if not foundPattern and nPH >= 3 and nPL >= 2
+    s1 = array.get(phPrices, nPH - 3)
+    hd = array.get(phPrices, nPH - 2)
+    s2 = array.get(phPrices, nPH - 1)
+    if hd > s1 and hd > s2 and f_pctDiff(s1, s2) <= patternTolPct * 1.5
+        neckline = math.min(array.get(plPrices, nPL - 2), array.get(plPrices, nPL - 1))
+        if close < neckline
+            foundPattern := true
+            foundName := "HEAD AND SHOULDERS"
+            foundStatus := "CONFIRMED"
+            foundBias := "BEARISH"
+        else
+            foundPattern := true
+            foundName := "HEAD AND SHOULDERS"
+            foundStatus := "FORMING"
+            foundBias := "BEARISH"
+
+if not foundPattern and nPL >= 3 and nPH >= 2
+    s1 = array.get(plPrices, nPL - 3)
+    hd = array.get(plPrices, nPL - 2)
+    s2 = array.get(plPrices, nPL - 1)
+    if hd < s1 and hd < s2 and f_pctDiff(s1, s2) <= patternTolPct * 1.5
+        neckline = math.max(array.get(phPrices, nPH - 2), array.get(phPrices, nPH - 1))
+        if close > neckline
+            foundPattern := true
+            foundName := "INVERSE HEAD AND SHOULDERS"
+            foundStatus := "CONFIRMED"
+            foundBias := "BULLISH"
+        else
+            foundPattern := true
+            foundName := "INVERSE HEAD AND SHOULDERS"
+            foundStatus := "FORMING"
+            foundBias := "BULLISH"
+
+if not foundPattern and nPH >= 3 and nPL >= 3
+    hSlope = array.get(phPrices, nPH - 1) - array.get(phPrices, nPH - 3)
+    lSlope = array.get(plPrices, nPL - 1) - array.get(plPrices, nPL - 3)
+    flatTol = atrVal * 0.5
+    if math.abs(hSlope) <= flatTol and lSlope > flatTol
+        foundPattern := true
+        foundName := "ASCENDING TRIANGLE"
+        foundBias := "BULLISH"
+        foundStatus := close > array.get(phPrices, nPH - 1) ? "CONFIRMED" : "FORMING"
+    else if hSlope < -flatTol and math.abs(lSlope) <= flatTol
+        foundPattern := true
+        foundName := "DESCENDING TRIANGLE"
+        foundBias := "BEARISH"
+        foundStatus := close < array.get(plPrices, nPL - 1) ? "CONFIRMED" : "FORMING"
+    else if hSlope < -flatTol and lSlope > flatTol
+        foundPattern := true
+        foundName := "SYMMETRICAL TRIANGLE"
+        foundBias := "NEUTRAL"
+        foundStatus := "FORMING"
+
+if not foundPattern and nPH >= 2 and nPL >= 2
+    impulseUp = not na(low[8]) and (close[5] - low[8]) > atrVal * 3 and volume[5] > avgVolume[5]
+    impulseDown = not na(high[8]) and (high[8] - close[5]) > atrVal * 3 and volume[5] > avgVolume[5]
+    tightRange = (ta.highest(high, 5) - ta.lowest(low, 5)) < atrVal * 2.2
+    if impulseUp and tightRange and close <= ta.highest(high, 5)
+        foundPattern := true
+        foundName := "BULL FLAG"
+        foundBias := "BULLISH"
+        foundStatus := ta.crossover(close, ta.highest(high[1], 5)) ? "CONFIRMED" : "FORMING"
+    else if impulseDown and tightRange and close >= ta.lowest(low, 5)
+        foundPattern := true
+        foundName := "BEAR FLAG"
+        foundBias := "BEARISH"
+        foundStatus := ta.crossunder(close, ta.lowest(low[1], 5)) ? "CONFIRMED" : "FORMING"
+
+if not foundPattern and nPH >= 2 and nPL >= 2
+    topLvl = array.get(phPrices, nPH - 1)
+    botLvl = array.get(plPrices, nPL - 1)
+    rangeTight = (topLvl - botLvl) > 0 and (topLvl - botLvl) < atrVal * 6
+    if rangeTight and f_pctDiff(array.get(phPrices, nPH - 2), topLvl) <= patternTolPct * 2 and f_pctDiff(array.get(plPrices, nPL - 2), botLvl) <= patternTolPct * 2
+        foundPattern := true
+        foundName := "RECTANGLE / RANGE"
+        foundBias := "NEUTRAL"
+        foundStatus := close > topLvl ? "CONFIRMED (UP)" : close < botLvl ? "CONFIRMED (DOWN)" : "FORMING"
+
+chartPattern := foundPattern ? foundName : "NONE"
+chartPatternStatus := foundPattern ? foundStatus : "NONE"
+chartPatternBias := foundPattern ? foundBias : "NEUTRAL"
+
+// #############################################################################
+// SECTION 20 — SUPPORT / RESISTANCE ENGINE (ranked, decluttered)
+// #############################################################################
+
+srTol = atrVal * srTouchTolMult
+
+f_touchCount(_arr, _price, _tol) =>
+    int _c = 0
+    if array.size(_arr) > 0
+        for i = 0 to array.size(_arr) - 1
+            if math.abs(array.get(_arr, i) - _price) <= _tol
+                _c += 1
+    _c
+
+var array<float> srLevels = array.new<float>()
+var array<string> srLabelsArr = array.new<string>()
+var array<int> srStrength = array.new<int>()
+
+array.clear(srLevels)
+array.clear(srLabelsArr)
+array.clear(srStrength)
+
+if not na(pdh)
+    array.push(srLevels, pdh)
+    array.push(srLabelsArr, "PDH")
+    array.push(srStrength, 3)
+if not na(pdl)
+    array.push(srLevels, pdl)
+    array.push(srLabelsArr, "PDL")
+    array.push(srStrength, 3)
+if not na(pwh)
+    array.push(srLevels, pwh)
+    array.push(srLabelsArr, "PWH")
+    array.push(srStrength, 4)
+if not na(pwl)
+    array.push(srLevels, pwl)
+    array.push(srLabelsArr, "PWL")
+    array.push(srStrength, 4)
+if showORInput and not na(orHigh)
+    array.push(srLevels, orHigh)
+    array.push(srLabelsArr, "ORH")
+    array.push(srStrength, 2)
+if showORInput and not na(orLow)
+    array.push(srLevels, orLow)
+    array.push(srLabelsArr, "ORL")
+    array.push(srStrength, 2)
+if array.size(phPrices) > 0
+    for i = 0 to array.size(phPrices) - 1
+        p = array.get(phPrices, i)
+        touches = f_touchCount(phPrices, p, srTol)
+        array.push(srLevels, p)
+        array.push(srLabelsArr, "Swing High")
+        array.push(srStrength, touches)
+if array.size(plPrices) > 0
+    for i = 0 to array.size(plPrices) - 1
+        p = array.get(plPrices, i)
+        touches = f_touchCount(plPrices, p, srTol)
+        array.push(srLevels, p)
+        array.push(srLabelsArr, "Swing Low")
+        array.push(srStrength, touches)
+
+f_rankLabel(_s) =>
+    _s >= 4 ? "VERY STRONG" : _s == 3 ? "STRONG" : _s == 2 ? "MODERATE" : "WEAK"
+
+// #############################################################################
+// SECTION 21 — MARKET REGIME CLASSIFIER
+// #############################################################################
+
+emaBullStack = close > emaFast and emaFast > emaMed and emaMed > emaSlow
+emaBearStack = close < emaFast and emaFast < emaMed and emaMed < emaSlow
+adxStrongNow = adxVal >= adxStrongTh
+adxWeakNow   = adxVal < adxWeakTh
+
+string marketRegime = "RANGE"
+if isExtremeVol
+    marketRegime := "HIGH VOLATILITY"
+else if isSqueeze and adxWeakNow
+    marketRegime := "LOW VOLATILITY"
+else if adxStrongNow and emaBullStack and structBias == 1
+    marketRegime := "STRONG BULLISH TREND"
+else if adxStrongNow and emaBearStack and structBias == -1
+    marketRegime := "STRONG BEARISH TREND"
+else if (emaBullStack or structBias == 1) and not adxWeakNow
+    marketRegime := "WEAK BULLISH TREND"
+else if (emaBearStack or structBias == -1) and not adxWeakNow
+    marketRegime := "WEAK BEARISH TREND"
+else if adxWeakNow and structBias == 0 and not isSqueeze
+    marketRegime := "RANGE"
+else
+    marketRegime := "CHOPPY / NO-TRADE"
+
+isChoppyRegime = marketRegime == "CHOPPY / NO-TRADE"
+
+// #############################################################################
+// SECTION 22 — MODE ENGINE (AUTO / INTRADAY / SWING) & TIMEFRAME GUIDANCE
+// #############################################################################
+
+chartTFSeconds = timeframe.in_seconds(timeframe.period)
+autoModeSelected = chartTFSeconds < 60 * 120 ? "INTRADAY" : "SWING"
+resolvedMode = modeInput == "AUTO" ? autoModeSelected : modeInput
+
+tfGuidance =
+     resolvedMode == "INTRADAY" and chartTFSeconds > 60 * 60 ? "Consider 5m/15m/30m for cleaner intraday signals." :
+     resolvedMode == "INTRADAY" and chartTFSeconds < 60 * 5 ? "1m/3m is noisy — consider 5m/15m for cleaner signals." :
+     resolvedMode == "SWING" and chartTFSeconds < 60 * 60 ? "Consider 4H/Daily for swing confirmation." :
+     "Timeframe is well suited to this mode."
+
+signalQuality =
+     isChoppyRegime ? "LOW" :
+     (marketRegime == "STRONG BULLISH TREND" or marketRegime == "STRONG BEARISH TREND") and not isExtremeVol ? "HIGH" :
+     "MEDIUM"
+
+// #############################################################################
+// SECTION 23 — EXTENSION / OVERBOUGHT-OVERSOLD FILTER
+// #############################################################################
+
+distFromEmaAtr = f_safeDiv(math.abs(close - emaFast), atrVal)
+distFromVwapAtr = na(sessionVwap) ? na : f_safeDiv(math.abs(close - sessionVwap), atrVal)
+isExtendedUp   = distFromEmaAtr > extAtrMult and close > emaFast
+isExtendedDown = distFromEmaAtr > extAtrMult and close < emaFast
+
+// #############################################################################
+// SECTION 24 — CONFLUENCE SCORING ENGINE
+// #############################################################################
+
+trendAlignBull = emaAlignBull / 3.0
+trendAlignBear = emaAlignBear / 3.0
+trendSlopeBull = emaFastSlopeUp ? 1.0 : 0.0
+trendSlopeBear = emaFastSlopeDown ? 1.0 : 0.0
+trendBullRaw = 0.7 * trendAlignBull + 0.3 * trendSlopeBull
+trendBearRaw = 0.7 * trendAlignBear + 0.3 * trendSlopeBear
+trendCompBull = math.max(trendBullRaw, structBias == 1 ? 0.8 : 0.0)
+trendCompBear = math.max(trendBearRaw, structBias == -1 ? 0.8 : 0.0)
+
+structCompBull = structBias == 1 ? structStrength : (bosUp or mssUp ? 0.6 : 0.0)
+structCompBear = structBias == -1 ? structStrength : (bosDown or mssDown ? 0.6 : 0.0)
+
+liqCompBull = liqShiftBullFull ? 1.0 : liqShiftBullActive ? 0.75 : sellSideReject ? 0.5 : 0.2
+liqCompBear = liqShiftBearFull ? 1.0 : liqShiftBearActive ? 0.75 : buySideReject ? 0.5 : 0.2
+
+fvgCompBull = bullFvgAvailable and bullFvgFromSweep ? 1.0 : bullFvgAvailable ? 0.5 : 0.0
+fvgCompBear = bearFvgAvailable and bearFvgFromSweep ? 1.0 : bearFvgAvailable ? 0.5 : 0.0
+
+volCompBull = (pvRelation == "BULLISH PARTICIPATION" ? 0.6 : 0.0) + (rvol >= rvolElevatedHi ? 0.4 : rvol >= rvolNormalHi ? 0.2 : 0.0) - (anyBearishDivergence ? 0.3 : 0.0)
+volCompBear = (pvRelation == "BEARISH PARTICIPATION" ? 0.6 : 0.0) + (rvol >= rvolElevatedHi ? 0.4 : rvol >= rvolNormalHi ? 0.2 : 0.0) - (anyBullishDivergence ? 0.3 : 0.0)
+volCompBull := math.max(0.0, math.min(1.0, volCompBull))
+volCompBear := math.max(0.0, math.min(1.0, volCompBear))
+
+momCompBull = momentumDirection == "BULLISH" ? (momentumRising ? 1.0 : 0.7) : momentumDirection == "NEUTRAL" ? 0.4 : 0.1
+momCompBear = momentumDirection == "BEARISH" ? (momentumRising ? 1.0 : 0.7) : momentumDirection == "NEUTRAL" ? 0.4 : 0.1
+
+locCompBull = (priceAboveVwap ? 0.4 : 0.0) + (vwapSlopeUp ? 0.3 : 0.0) + (isExtendedUp ? 0.0 : 0.3)
+locCompBear = (priceBelowVwap ? 0.4 : 0.0) + (vwapSlopeDown ? 0.3 : 0.0) + (isExtendedDown ? 0.0 : 0.3)
+
+volatilityComp = isExtremeVol ? 0.3 : isSqueeze ? 0.6 : 1.0
+
+htfCompBull = htfBias == 1 ? 1.0 : htfBias == 0 ? 0.5 : 0.0
+htfCompBear = htfBias == -1 ? 1.0 : htfBias == 0 ? 0.5 : 0.0
+
+sumWeights = wTrend + wStructure + wLiquidity + wFVG + wVolume + wMomentum + wLocation + wVolatility + wHTF
+
+rawBull = wTrend * trendCompBull + wStructure * structCompBull + wLiquidity * liqCompBull + wFVG * fvgCompBull +
+     wVolume * volCompBull + wMomentum * momCompBull + wLocation * locCompBull + wVolatility * volatilityComp + wHTF * htfCompBull
+rawBear = wTrend * trendCompBear + wStructure * structCompBear + wLiquidity * liqCompBear + wFVG * fvgCompBear +
+     wVolume * volCompBear + wMomentum * momCompBear + wLocation * locCompBear + wVolatility * volatilityComp + wHTF * htfCompBear
+
+scoreBull = sumWeights > 0 ? 100 * rawBull / sumWeights : 0.0
+scoreBear = sumWeights > 0 ? 100 * rawBear / sumWeights : 0.0
+
+f_classifyScore(_s) =>
+    _s >= thHighConv ? "HIGH CONVICTION" : _s >= thStrong ? "STRONG" : _s >= thModerate ? "MODERATE" : _s >= thWeak ? "WEAK" : "NO TRADE"
+
+// #############################################################################
+// SECTION 25 — RISK / REWARD: ENTRY, STOP, TARGETS
+// #############################################################################
+
+structStopLong  = na(lastPL) ? close - atrVal * atrStopMult : lastPL
+structStopShort = na(lastPH) ? close + atrVal * atrStopMult : lastPH
+atrStopLong  = close - atrVal * atrStopMult
+atrStopShort = close + atrVal * atrStopMult
+fvgStopLong  = bullFvgAvailable ? nearestFreshBullBottom : structStopLong
+fvgStopShort = bearFvgAvailable ? nearestFreshBearTop : structStopShort
+swingStopLong  = na(lastPL) ? atrStopLong : lastPL
+swingStopShort = na(lastPH) ? atrStopShort : lastPH
+
+hybridDistLong  = math.max(close - structStopLong, atrVal * hybridMinAtrMult)
+hybridDistShort = math.max(structStopShort - close, atrVal * hybridMinAtrMult)
+hybridStopLong  = close - hybridDistLong
+hybridStopShort = close + hybridDistShort
+
+finalStopLong = switch stopMethodInput
+    "Structure" => structStopLong
+    "ATR" => atrStopLong
+    "FVG Invalidation" => fvgStopLong
+    "Swing High/Low" => swingStopLong
+    => hybridStopLong
+
+finalStopShort = switch stopMethodInput
+    "Structure" => structStopShort
+    "ATR" => atrStopShort
+    "FVG Invalidation" => fvgStopShort
+    "Swing High/Low" => swingStopShort
+    => hybridStopShort
+
+riskLong  = close - finalStopLong
+riskShort = finalStopShort - close
+
+f_nextResistanceAbove(_price) =>
+    float _best = na
+    if array.size(srLevels) > 0
+        for i = 0 to array.size(srLevels) - 1
+            lvl = array.get(srLevels, i)
+            if lvl > _price and (na(_best) or lvl < _best)
+                _best := lvl
+    _best
+
+f_nextSupportBelow(_price) =>
+    float _best = na
+    if array.size(srLevels) > 0
+        for i = 0 to array.size(srLevels) - 1
+            lvl = array.get(srLevels, i)
+            if lvl < _price and (na(_best) or lvl > _best)
+                _best := lvl
+    _best
+
+structTargetLong  = f_nextResistanceAbove(close)
+structTargetShort = f_nextSupportBelow(close)
+
+target1RLong  = close + riskLong * minRRValue
+target1RShort = close - riskShort * minRRValue
+
+target1Long  = not na(structTargetLong)  and riskLong  > 0 and (structTargetLong - close) / riskLong  >= minRRValue ? structTargetLong  : target1RLong
+target1Short = not na(structTargetShort) and riskShort > 0 and (close - structTargetShort) / riskShort >= minRRValue ? structTargetShort : target1RShort
+
+r1Long  = riskLong  > 0 ? (target1Long  - close) / riskLong  : na
+r1Short = riskShort > 0 ? (close - target1Short) / riskShort : na
+
+target2Long  = close + riskLong  * (minRRValue + t2ExtraR)
+target2Short = close - riskShort * (minRRValue + t2ExtraR)
+target3Long  = close + riskLong  * (minRRValue + t3ExtraR)
+target3Short = close - riskShort * (minRRValue + t3ExtraR)
+
+rrOkLong  = not na(r1Long)  and r1Long  >= minRRValue and riskLong  > 0
+rrOkShort = not na(r1Short) and r1Short >= minRRValue and riskShort > 0
+
+// #############################################################################
+// SECTION 26 — POSITION SIZE CALCULATOR (off live strategy equity)
+// #############################################################################
+
+maxRiskAmount = strategy.equity * (riskPctInput / 100)
+riskPerShareLong  = riskLong
+riskPerShareShort = riskShort
+qtyLong  = riskPerShareLong  > 0 ? math.floor(maxRiskAmount / riskPerShareLong)  : 0.0
+qtyShort = riskPerShareShort > 0 ? math.floor(maxRiskAmount / riskPerShareShort) : 0.0
+
+// #############################################################################
+// SECTION 27 — OVERTRADING PROTECTION (REAL: uses live equity & trade history)
+// #############################################################################
+
+var float dayStartEquity = na
+var int realTradesToday = 0
+var int realConsecLosses = 0
+var int realCooldownUntilBar = 0
+var int lastSeenClosedTrades = 0
+
+if newSessionDay
+    dayStartEquity := strategy.equity
+    realTradesToday := 0
+
+realDayPnLPct = na(dayStartEquity) or dayStartEquity == 0 ? 0.0 : (strategy.equity - dayStartEquity) / dayStartEquity * 100
+dailyLimitReached = realDayPnLPct <= -maxDailyLossPct
+tradeCapReached = realTradesToday >= maxTradesDay
+consecLossLimitReached = realConsecLosses >= maxConsecLoss
+inCooldown = bar_index < realCooldownUntilBar
+
+if strategy.closedtrades > lastSeenClosedTrades
+    lastIdx = strategy.closedtrades - 1
+    lastProfit = strategy.closedtrades.profit(lastIdx)
+    if lastProfit < 0
+        realConsecLosses += 1
+        realCooldownUntilBar := bar_index + cooldownBars
+    else
+        realConsecLosses := 0
+    lastSeenClosedTrades := strategy.closedtrades
+
+// #############################################################################
+// SECTION 28 — DUPLICATE SIGNAL CONTROL (REAL: uses live open-position state)
+// #############################################################################
+
+var int lastBullSignalBar = -100000
+var int lastBearSignalBar = -100000
+
+newBullEvidenceBar = math.max(math.max(mssUp ? bar_index : -1, freshBullFvgThisBar ? bar_index : -1), sellSideReject ? bar_index : -1)
+newBearEvidenceBar = math.max(math.max(mssDown ? bar_index : -1, freshBearFvgThisBar ? bar_index : -1), buySideReject ? bar_index : -1)
+
+bullSignalIsDuplicate = strategy.position_size > 0 or (newBullEvidenceBar <= lastBullSignalBar)
+bearSignalIsDuplicate = strategy.position_size < 0 or (newBearEvidenceBar <= lastBearSignalBar)
+
+// #############################################################################
+// SECTION 29 — NO-TRADE GATE & FINAL SIGNAL ENGINE
+// #############################################################################
+
+classFloor = minTradableClassInput == "HIGH CONVICTION" ? thHighConv : minTradableClassInput == "STRONG" ? thStrong : thModerate
+requiredScore = math.max(isChoppyRegime ? math.max(chopMinScore, thWeak) : thWeak, classFloor)
+
+qualifiesBullPre = scoreBull >= requiredScore and (scoreBull - scoreBear) >= minGapBetween
+qualifiesBearPre = scoreBear >= requiredScore and (scoreBear - scoreBull) >= minGapBetween
+rawWinDirPre = qualifiesBullPre and scoreBull > scoreBear ? 1 : qualifiesBearPre and scoreBear > scoreBull ? -1 : 0
+
+// "Strong / verified" gate #2: the winning side must hold for N consecutive CLOSED bars, not just one.
+var int qualStreak = 0
+var int qualStreakDir = 0
+if barstate.isconfirmed
+    if rawWinDirPre != 0 and rawWinDirPre == qualStreakDir
+        qualStreak += 1
+    else
+        qualStreak := rawWinDirPre != 0 ? 1 : 0
+        qualStreakDir := rawWinDirPre
+
+confirmationOk = qualStreak >= confirmBarsInput
+
+qualifiesBull = qualifiesBullPre and confirmationOk
+qualifiesBear = qualifiesBearPre and confirmationOk
+
+sessionOk = resolvedMode == "SWING" or (activeHoursOk and not inOpenProtection and not pastEODCutoff)
+overtradingOk = not (dailyLimitReached or tradeCapReached or consecLossLimitReached or inCooldown)
+liquidityOk = not instrumentIlliquid
+inBacktestWindow = time >= backtestStartInput and time <= backtestEndInput
+
+string noTradeReason = "NONE"
+bool hardBlock = false
+
+if not inBacktestWindow
+    hardBlock := true
+    noTradeReason := "Outside configured backtest window."
+else if not sessionOk
+    hardBlock := true
+    noTradeReason := inOpenProtection ? "Daily rollover window — waiting for the reference range to form." :
+         pastEODCutoff ? "Approaching the weekly close — new intraday risk paused ahead of the weekend gap." : "Outside the configured Active Hours window."
+else if isChoppyRegime and not (qualifiesBullPre or qualifiesBearPre)
+    hardBlock := true
+    noTradeReason := "Market is CHOPPY — insufficient evidence to trade."
+else if rawWinDirPre != 0 and not confirmationOk
+    hardBlock := true
+    noTradeReason := "Building confirmation (" + str.tostring(qualStreak) + "/" + str.tostring(confirmBarsInput) + " consecutive confirmed bars)."
+else if not liquidityOk
+    hardBlock := true
+    noTradeReason := noVolumeData ? "DATA LIMITATION — no volume feed available for this symbol/timeframe." : "Liquidity too low for reliable execution (volume-based proxy)."
+else if not overtradingOk
+    hardBlock := true
+    noTradeReason := dailyLimitReached ? "Daily risk limit reached — no new trades." :
+         tradeCapReached ? "Maximum trades for the day reached." :
+         consecLossLimitReached ? "Max consecutive losses reached — cooling off." : "Cooldown active after a losing trade."
+
+rawDirection =
+     qualifiesBull and scoreBull > scoreBear ? "BUY" :
+     qualifiesBear and scoreBear > scoreBull ? "SELL" :
+     "NO TRADE"
+
+isExtendedState = (rawDirection == "BUY" and isExtendedUp) or (rawDirection == "SELL" and isExtendedDown)
+rrFailState = (rawDirection == "BUY" and not rrOkLong) or (rawDirection == "SELL" and not rrOkShort)
+dupState = (rawDirection == "BUY" and bullSignalIsDuplicate) or (rawDirection == "SELL" and bearSignalIsDuplicate)
+
+string rawFinalState = "NO TRADE"
+if hardBlock
+    rawFinalState := "NO TRADE"
+else if rawDirection == "NO TRADE"
+    rawFinalState := "NO TRADE"
+    if noTradeReason == "NONE"
+        noTradeReason := "Insufficient confluence (score below threshold or bull/bear scores too close)."
+else if dupState
+    rawFinalState := "NO TRADE"
+    noTradeReason := "Duplicate signal — position already open with no new structure/liquidity/FVG event."
+else if isExtendedState
+    rawFinalState := "WAIT — EXTENDED"
+    noTradeReason := "Price extended from EMA/VWAP — waiting for a pullback."
+else if rrFailState
+    rawFinalState := "GOOD SETUP — POOR R:R"
+    noTradeReason := "Confluence acceptable but reward does not clear the minimum Risk:Reward."
+else
+    rawFinalState := rawDirection
+
+rawScore = rawFinalState == "SELL" ? scoreBear : scoreBull
+rawScoreClass = f_classifyScore(rawScore)
+
+updateNow = showEarlySignals or barstate.isconfirmed
+
+var string dispState = "NO TRADE"
+var float dispScore = 0.0
+var string dispScoreClass = "NO TRADE"
+var string dispReason = "NONE"
+var float dispEntry = na
+var float dispStop = na
+var float dispT1 = na
+var float dispT2 = na
+var float dispT3 = na
+var float dispRR = na
+var string dispStatus = "CONFIRMED"
+
+if updateNow
+    dispState := rawFinalState
+    dispScore := rawScore
+    dispScoreClass := rawScoreClass
+    dispReason := noTradeReason
+    dispStatus := barstate.isconfirmed ? "CONFIRMED" : "LIVE — UNCONFIRMED"
+    if rawFinalState == "BUY"
+        dispEntry := close
+        dispStop := finalStopLong
+        dispT1 := target1Long
+        dispT2 := target2Long
+        dispT3 := target3Long
+        dispRR := r1Long
+    else if rawFinalState == "SELL"
+        dispEntry := close
+        dispStop := finalStopShort
+        dispT1 := target1Short
+        dispT2 := target2Short
+        dispT3 := target3Short
+        dispRR := r1Short
+    else
+        dispEntry := na
+        dispStop := na
+        dispT1 := na
+        dispT2 := na
+        dispT3 := na
+        dispRR := na
+
+newConfirmedBuy  = barstate.isconfirmed and rawFinalState == "BUY"
+newConfirmedSell = barstate.isconfirmed and rawFinalState == "SELL"
+
+if newConfirmedBuy
+    lastBullSignalBar := bar_index
+if newConfirmedSell
+    lastBearSignalBar := bar_index
+
+// #############################################################################
+// SECTION 30 — EXECUTION ENGINE (real strategy.entry / strategy.exit orders)
+// #############################################################################
+
+var float actEntryPrice = na
+var float actStop = na
+var float actT1 = na
+var float actT2 = na
+var float actInitialRiskPerShare = na
+var int   actDir = 0
+var float actQtyTotal = na
+var float actQtyT1 = na
+var float actQtyT2 = na
+
+// R-multiple bookkeeping: a single entry can close via TWO exit orders (TP1 + TP2) when partial exits
+// are enabled, which may show up as more than one row in strategy.closedtrades. Rather than assume a
+// fixed 1:1 mapping between "one entry" and "one closedtrades index" (fragile and unverifiable here),
+// we record the closedtrades COUNT at entry time and, once flat again, sum the profit of every
+// closedtrades record added since — robust regardless of how many rows one round-trip produced.
+var int closedTradesAtEntry = 0
+var float riskCurrencyThisTrade = na
+var array<float> rMultiples = array.new<float>()
+var array<float> negRs = array.new<float>()
+
+// Only one position at a time (position_size == 0 required to enter) — this is the conservative
+// "max concurrent positions = 1" default from the spec. Raising `pyramiding` in the declaration above
+// would not by itself stack entries; doing so safely would also require extending the R-multiple
+// bookkeeping and the trailing/partial-exit logic below.
+canEnterLong  = newConfirmedBuy  and strategy.position_size == 0 and qtyLong  > 0
+canEnterShort = newConfirmedSell and strategy.position_size == 0 and qtyShort > 0
+
+if canEnterLong
+    strategy.entry("Long", strategy.long, qty = qtyLong, comment = "Buy " + str.tostring(math.round(dispScore)))
+    actEntryPrice := close
+    actStop := finalStopLong
+    actT1 := target1Long
+    actT2 := target2Long
+    actInitialRiskPerShare := riskLong
+    actDir := 1
+    actQtyTotal := qtyLong
+    actQtyT1 := math.floor(qtyLong * partial1PctInput / 100)
+    actQtyT2 := qtyLong - actQtyT1
+    closedTradesAtEntry := strategy.closedtrades
+    riskCurrencyThisTrade := riskLong * qtyLong
+    realTradesToday += 1
+
+if canEnterShort
+    strategy.entry("Short", strategy.short, qty = qtyShort, comment = "Sell " + str.tostring(math.round(dispScore)))
+    actEntryPrice := close
+    actStop := finalStopShort
+    actT1 := target1Short
+    actT2 := target2Short
+    actInitialRiskPerShare := riskShort
+    actDir := -1
+    actQtyTotal := qtyShort
+    actQtyT1 := math.floor(qtyShort * partial1PctInput / 100)
+    actQtyT2 := qtyShort - actQtyT1
+    closedTradesAtEntry := strategy.closedtrades
+    riskCurrencyThisTrade := riskShort * qtyShort
+    realTradesToday += 1
+
+currentR = na(actInitialRiskPerShare) or actInitialRiskPerShare <= 0 or na(actEntryPrice) ? na :
+     actDir == 1 ? (close - actEntryPrice) / actInitialRiskPerShare :
+     actDir == -1 ? (actEntryPrice - close) / actInitialRiskPerShare : na
+
+if strategy.position_size > 0 and actDir == 1
+    if breakevenEnableInput and not na(currentR) and currentR >= breakevenAtRInput
+        actStop := math.max(actStop, actEntryPrice)
+    if trailMethodInput != "None" and not na(currentR) and currentR >= trailActivateRInput
+        trailCandidate = trailMethodInput == "ATR" ? close - atrVal * trailAtrMultInput :
+             trailMethodInput == "EMA" ? emaFast :
+             trailMethodInput == "Structure" and not na(lastPL) ? lastPL : actStop
+        if not na(trailCandidate)
+            actStop := math.max(actStop, trailCandidate)
+    if partialExitEnableInput and not na(actQtyT1) and actQtyT1 > 0
+        strategy.exit("TP1-L", from_entry = "Long", qty = actQtyT1, limit = actT1, stop = actStop, comment_loss = "Stop", comment_profit = "T1")
+        strategy.exit("TP2-L", from_entry = "Long", qty = actQtyT2, limit = actT2, stop = actStop, comment_loss = "Stop", comment_profit = "T2")
+    else
+        strategy.exit("TPFULL-L", from_entry = "Long", qty = actQtyTotal, limit = actT2, stop = actStop, comment_loss = "Stop", comment_profit = "Target")
+
+if strategy.position_size < 0 and actDir == -1
+    if breakevenEnableInput and not na(currentR) and currentR >= breakevenAtRInput
+        actStop := math.min(actStop, actEntryPrice)
+    if trailMethodInput != "None" and not na(currentR) and currentR >= trailActivateRInput
+        trailCandidateS = trailMethodInput == "ATR" ? close + atrVal * trailAtrMultInput :
+             trailMethodInput == "EMA" ? emaFast :
+             trailMethodInput == "Structure" and not na(lastPH) ? lastPH : actStop
+        if not na(trailCandidateS)
+            actStop := math.min(actStop, trailCandidateS)
+    if partialExitEnableInput and not na(actQtyT1) and actQtyT1 > 0
+        strategy.exit("TP1-S", from_entry = "Short", qty = actQtyT1, limit = actT1, stop = actStop, comment_loss = "Stop", comment_profit = "T1")
+        strategy.exit("TP2-S", from_entry = "Short", qty = actQtyT2, limit = actT2, stop = actStop, comment_loss = "Stop", comment_profit = "T2")
+    else
+        strategy.exit("TPFULL-S", from_entry = "Short", qty = actQtyTotal, limit = actT2, stop = actStop, comment_loss = "Stop", comment_profit = "Target")
+
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    if strategy.closedtrades > closedTradesAtEntry and not na(riskCurrencyThisTrade) and riskCurrencyThisTrade > 0
+        float tradeProfitSum = 0.0
+        for i = closedTradesAtEntry to strategy.closedtrades - 1
+            tradeProfitSum += strategy.closedtrades.profit(i)
+        rMult = tradeProfitSum / riskCurrencyThisTrade
+        array.push(rMultiples, rMult)
+        if rMult < 0
+            array.push(negRs, rMult)
+    actDir := 0
+    actEntryPrice := na
+    actStop := na
+    actT1 := na
+    actT2 := na
+    actInitialRiskPerShare := na
+
+// #############################################################################
+// SECTION 31 — CUSTOM PERFORMANCE STATISTICS (R-multiple, expectancy, Sortino-like)
+// #############################################################################
+
+var table statsTable = table.new(position.bottom_right, 2, 17, border_width = 1)
+
+if barstate.islast
+    table.clear(statsTable, 0, 0, 1, 16)
+    nTrades = strategy.closedtrades
+    row = 0
+    table.cell(statsTable, 0, row, "BACKTEST STATS", bgcolor = color.new(color.blue, 10), text_color = color.white, text_size = size.small)
+    table.cell(statsTable, 1, row, "Mode: " + resolvedMode, bgcolor = color.new(color.blue, 10), text_color = color.white, text_size = size.small)
+    row += 1
+
+    if nTrades == 0
+        table.cell(statsTable, 0, row, "No closed trades yet", text_size = size.small)
+        table.cell(statsTable, 1, row, "—", text_size = size.small)
+        row += 1
+    else
+        float largestWin = 0.0
+        float largestLoss = 0.0
+        int longTrades = 0
+        int shortTrades = 0
+        int longWins = 0
+        int shortWins = 0
+
+        for i = 0 to nTrades - 1
+            p = strategy.closedtrades.profit(i)
+            sz = strategy.closedtrades.size(i)
+            largestWin := math.max(largestWin, p)
+            largestLoss := math.min(largestLoss, p)
+            if sz > 0
+                longTrades += 1
+                if p > 0
+                    longWins += 1
+            else
+                shortTrades += 1
+                if p > 0
+                    shortWins += 1
+        // rMultiples / negRs are built incrementally in Section 30 as each round-trip trade closes
+        // (robust to a single entry producing more than one strategy.closedtrades row via partial exits)
+
+        winRate = 100.0 * strategy.wintrades / nTrades
+        profitFactor = strategy.grossloss != 0 ? strategy.grossprofit / math.abs(strategy.grossloss) : na
+        avgTrade = strategy.netprofit / nTrades
+        avgWin = strategy.wintrades > 0 ? strategy.grossprofit / strategy.wintrades : na
+        avgLoss = strategy.losstrades > 0 ? strategy.grossloss / strategy.losstrades : na
+        meanR = array.size(rMultiples) > 0 ? array.avg(rMultiples) : na
+        stdevR = array.size(rMultiples) > 1 ? array.stdev(rMultiples) : na
+        downsideDevR = array.size(negRs) > 1 ? array.stdev(negRs) : na
+        sharpeLike = not na(stdevR) and stdevR > 0 ? meanR / stdevR : na
+        sortinoLike = not na(downsideDevR) and downsideDevR > 0 ? meanR / downsideDevR : na
+
+        table.cell(statsTable, 0, row, "Net Profit", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(strategy.netprofit, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Gross Profit / Loss", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(strategy.grossprofit, "#.##") + " / $" + str.tostring(strategy.grossloss, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Profit Factor", text_size = size.small)
+        table.cell(statsTable, 1, row, na(profitFactor) ? "N/A" : str.tostring(profitFactor, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Win Rate", text_size = size.small)
+        table.cell(statsTable, 1, row, str.tostring(winRate, "#.#") + "%  (" + str.tostring(nTrades) + " trades)", text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Avg Trade", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(avgTrade, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Avg Win / Avg Loss", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(avgWin, "#.##") + " / $" + str.tostring(avgLoss, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Largest Win / Loss", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(largestWin, "#.##") + " / $" + str.tostring(largestLoss, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Max Drawdown", text_size = size.small)
+        table.cell(statsTable, 1, row, "$" + str.tostring(strategy.max_drawdown, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Avg R Multiple (Expectancy)", text_size = size.small)
+        table.cell(statsTable, 1, row, na(meanR) ? "N/A" : str.tostring(meanR, "#.##") + "R", text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Sharpe-like (mean R / stdev R)", text_size = size.small)
+        table.cell(statsTable, 1, row, na(sharpeLike) ? "N/A" : str.tostring(sharpeLike, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Sortino-like (mean R / downside dev)", text_size = size.small)
+        table.cell(statsTable, 1, row, na(sortinoLike) ? "N/A" : str.tostring(sortinoLike, "#.##"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Long Trades (win rate)", text_size = size.small)
+        table.cell(statsTable, 1, row, str.tostring(longTrades) + "  (" + (longTrades > 0 ? str.tostring(100.0 * longWins / longTrades, "#.#") : "0") + "%)", text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Short Trades (win rate)", text_size = size.small)
+        table.cell(statsTable, 1, row, str.tostring(shortTrades) + "  (" + (shortTrades > 0 ? str.tostring(100.0 * shortWins / shortTrades, "#.#") : "0") + "%)", text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Open Position", text_size = size.small)
+        table.cell(statsTable, 1, row, strategy.position_size == 0 ? "FLAT" : (strategy.position_size > 0 ? "LONG " : "SHORT ") + str.tostring(math.abs(strategy.position_size), "#") +
+             (na(currentR) ? "" : "  (" + str.tostring(currentR, "#.##") + "R)"), text_size = size.small)
+        row += 1
+        table.cell(statsTable, 0, row, "Note", text_color = color.gray, text_size = size.tiny)
+        table.cell(statsTable, 1, row, "Backtest ≠ future results. Bar-close fills, not tick-level.", text_color = color.gray, text_size = size.tiny)
+
+// #############################################################################
+// SECTION 32 — PLOTTING
+// #############################################################################
+
+plot(emaFast, "EMA Fast", color = color.new(color.aqua, 0), linewidth = 1)
+plot(emaMed, "EMA Medium", color = color.new(color.orange, 0), linewidth = 1)
+plot(emaSlow, "EMA Slow", color = color.new(color.purple, 0), linewidth = 2)
+
+plot(showVWAPInput and resolvedMode == "INTRADAY" ? sessionVwap : na, "Session VWAP", color = color.new(color.yellow, 0), linewidth = 2)
+p1u = plot(showVWAPInput and showVwapBandsInput and resolvedMode == "INTRADAY" ? vwapUpper1 : na, "VWAP +1", color = color.new(color.yellow, 70))
+p1l = plot(showVWAPInput and showVwapBandsInput and resolvedMode == "INTRADAY" ? vwapLower1 : na, "VWAP -1", color = color.new(color.yellow, 70))
+fill(p1u, p1l, color = color.new(color.yellow, 92))
+
+plot(showORInput and orFormed ? orHigh : na, "Opening Range High", color = color.new(color.blue, 30), style = plot.style_linebr)
+plot(showORInput and orFormed ? orLow  : na, "Opening Range Low",  color = color.new(color.blue, 30), style = plot.style_linebr)
+
+plotshape(showSignalsInput and canEnterLong,  title = "BUY",  style = shape.triangleup,   location = location.belowbar, color = color.new(color.green, 0), size = size.small)
+plotshape(showSignalsInput and canEnterShort, title = "SELL", style = shape.triangledown, location = location.abovebar, color = color.new(color.red, 0),   size = size.small)
+
+if showStructInput and barstate.isconfirmed and lastStructEvent != "NONE" and lastStructEventBar == bar_index
+    isBullStructEvent = str.contains(lastStructEvent, "Bullish")
+    label.new(bar_index, isBullStructEvent ? low - atrVal : high + atrVal,
+         text = lastStructEvent, style = isBullStructEvent ? label.style_label_up : label.style_label_down,
+         color = color.new(isBullStructEvent ? color.green : color.red, 15), textcolor = color.white, size = size.tiny)
+
+if showPatternInput and barstate.isconfirmed and candlePattern != "NONE"
+    label.new(bar_index, candleBias == "BULLISH" ? low - atrVal * 1.6 : high + atrVal * 1.6, text = candlePattern,
+         style = candleBias == "BULLISH" ? label.style_label_up : candleBias == "BEARISH" ? label.style_label_down : label.style_label_left,
+         color = color.new(color.gray, 25), textcolor = color.white, size = size.tiny)
+
+var array<line> srLines = array.new<line>()
+var array<label> srLabelObjs = array.new<label>()
+if showSRInput and barstate.islast
+    if array.size(srLines) > 0
+        for i = 0 to array.size(srLines) - 1
+            line.delete(array.get(srLines, i))
+            label.delete(array.get(srLabelObjs, i))
+    array.clear(srLines)
+    array.clear(srLabelObjs)
+    if array.size(srLevels) > 0
+        int shown_above = 0
+        int shown_below = 0
+        for i = 0 to array.size(srLevels) - 1
+            lvl = array.get(srLevels, i)
+            nm  = array.get(srLabelsArr, i)
+            st  = array.get(srStrength, i)
+            if lvl > close and shown_above < srMaxLevels
+                array.push(srLines, line.new(bar_index - 30, lvl, bar_index + 10, lvl, color = color.new(color.red, 55), style = line.style_dotted))
+                array.push(srLabelObjs, label.new(bar_index + 10, lvl, text = nm + " · " + f_rankLabel(st), style = label.style_label_left, color = color.new(color.red, 70), textcolor = color.gray, size = size.tiny))
+                shown_above += 1
+            else if lvl < close and shown_below < srMaxLevels
+                array.push(srLines, line.new(bar_index - 30, lvl, bar_index + 10, lvl, color = color.new(color.green, 55), style = line.style_dotted))
+                array.push(srLabelObjs, label.new(bar_index + 10, lvl, text = nm + " · " + f_rankLabel(st), style = label.style_label_left, color = color.new(color.green, 70), textcolor = color.gray, size = size.tiny))
+                shown_below += 1
+
+bgcolor(isChoppyRegime ? color.new(color.gray, 90) : na, title = "Choppy Regime Shading")
+
+// #############################################################################
+// SECTION 33 — DASHBOARD  (same layout/content as the indicator, for parity)
+// #############################################################################
+
+var table dash = table.new(dashPos, 2, 32, border_width = 1)
+
+f_stateColor(_s) =>
+    _s == "BUY" ? color.new(color.green, 10) : _s == "SELL" ? color.new(color.red, 10) :
+     _s == "WAIT — EXTENDED" or _s == "GOOD SETUP — POOR R:R" ? color.new(color.orange, 20) : color.new(color.gray, 30)
+
+if showDashboard and barstate.islast
+    table.clear(dash, 0, 0, 1, 31)
+    r = 0
+    table.cell(dash, 0, r, "GOLD (XAUUSD) TRADING ENGINE", text_color = color.white, bgcolor = color.new(color.blue, 10), text_size = size.small)
+    table.cell(dash, 1, r, "TECHNICAL ANALYSIS ONLY", text_color = color.white, bgcolor = color.new(color.blue, 10), text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "Mode", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, resolvedMode + (modeInput == "AUTO" ? " (Auto)" : ""), text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "Timeframe", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, timeframe.period + "  —  " + tfGuidance, text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "HTF Bias (" + htfString + ")", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, htfBiasLabel, text_color = htfBias == 1 ? color.green : htfBias == -1 ? color.red : color.gray, text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "Market Regime", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, marketRegime, text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "Signal Quality", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, signalQuality, text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "Bias", text_color = color.gray, text_size = size.small)
+    table.cell(dash, 1, r, structBias == 1 ? "BULLISH STRUCTURE" : structBias == -1 ? "BEARISH STRUCTURE" : "MIXED / UNCLEAR", text_size = size.small)
+    r += 1
+    table.cell(dash, 0, r, "SIGNAL", text_color = color.white, bgcolor = f_stateColor(dispState), text_size = size.normal)
+    table.cell(dash, 1, r, dispState, text_color = color.white, bgcolor = f_stateColor(dispState), text_size = size.normal)
+    r += 1
+    if dispState == "BUY" or dispState == "SELL"
+        table.cell(dash, 0, r, "Score", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, str.tostring(math.round(dispScore)) + "/100 (" + dispScoreClass + ")", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Entry", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, "$" + str.tostring(dispEntry, format.mintick), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Stop Loss", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, "$" + str.tostring(dispStop, format.mintick), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Target 1 / 2 / 3", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, "$" + str.tostring(dispT1, format.mintick) + " / $" + str.tostring(dispT2, format.mintick) + " / $" + str.tostring(dispT3, format.mintick), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Risk : Reward", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, "1 : " + str.tostring(dispRR, "#.##"), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Position Size (live equity)", text_color = color.gray, text_size = size.small)
+        qtyShow = dispState == "BUY" ? qtyLong : qtyShort
+        table.cell(dash, 1, r, "Qty ≈ " + str.tostring(qtyShow, "#") + "  (Risk $" + str.tostring(maxRiskAmount, "#") + ")", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Pattern", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, candlePattern != "NONE" ? candlePattern : (chartPattern != "NONE" ? chartPattern + " (" + chartPatternStatus + ")" : "NONE"), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Status", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, dispStatus, text_color = dispStatus == "CONFIRMED" ? color.green : color.orange, text_size = size.small)
+        r += 1
+    else
+        table.cell(dash, 0, r, "Reason", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, dispReason, text_size = size.small)
+        r += 1
+
+    if styleInput == "ADVANCED"
+        table.cell(dash, 0, r, "— ADVANCED —", bgcolor = color.new(color.gray, 60), text_size = size.small)
+        table.cell(dash, 1, r, "", bgcolor = color.new(color.gray, 60))
+        r += 1
+        table.cell(dash, 0, r, "RVOL", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, str.tostring(rvol, "#.##") + " (" + rvolClass + ")", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "ATR / ATR%", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, str.tostring(atrVal, format.mintick) + " / " + str.tostring(atrPct, "#.##") + "%", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "ADX", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, str.tostring(adxVal, "#.#"), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "VWAP", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, na(sessionVwap) ? "N/A" : (priceAboveVwap ? "ABOVE" : priceBelowVwap ? "BELOW" : "AT"), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Liquidity", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, liquidityStatusLabel, text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Liquidity Shift", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, liqShiftBullFull ? "BULLISH (FULL)" : liqShiftBullActive ? "BULLISH (BUILDING)" : liqShiftBearFull ? "BEARISH (FULL)" : liqShiftBearActive ? "BEARISH (BUILDING)" : "NONE", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Confirmation Streak", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, (rawWinDirPre == 1 ? "BULL " : rawWinDirPre == -1 ? "BEAR " : "— ") + str.tostring(qualStreak) + "/" + str.tostring(confirmBarsInput), text_color = confirmationOk ? color.green : color.gray, text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "FVG", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, bullFvgAvailable ? "BULLISH" : bearFvgAvailable ? "BEARISH" : "NONE", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Momentum", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, momentumDirection + (momentumRising ? " (rising)" : ""), text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Volume Divergence", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, anyBearishDivergence ? "BEARISH WARNING" : anyBullishDivergence ? "BULLISH WARNING" : "NONE", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Gap", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, gapClassification + " (" + gapMagnitude + ")", text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Opening Range", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, orbStatusLabel, text_color = lowVolumeBreakoutWarning ? color.orange : color.gray, text_size = size.small)
+        r += 1
+        table.cell(dash, 0, r, "Extension", text_color = color.gray, text_size = size.small)
+        table.cell(dash, 1, r, isExtendedUp ? "EXTENDED UP" : isExtendedDown ? "EXTENDED DOWN" : "NORMAL", text_size = size.small)
+        r += 1
+
+    table.cell(dash, 0, r, "Confidence ≠ win probability. Historical performance ≠ future results.", text_color = color.gray, text_size = size.tiny)
+    table.cell(dash, 1, r, "Gold gaps over weekends/rollover. See bottom-right table for backtest stats.", text_color = color.gray, text_size = size.tiny)
+
+// #############################################################################
+// SECTION 34 — ALERTS
+// #############################################################################
+
+f_fmtPrice(_p) => str.tostring(_p, format.mintick)
+
+f_buildAlertText(_signal, _status) =>
+    _dir = _signal == "BUY" ? "BUY" : "SELL"
+    _score = _signal == "BUY" ? scoreBull : scoreBear
+    _entry = close
+    _stop = _signal == "BUY" ? finalStopLong : finalStopShort
+    _t1 = _signal == "BUY" ? target1Long : target1Short
+    _t2 = _signal == "BUY" ? target2Long : target2Short
+    _rr = _signal == "BUY" ? r1Long : r1Short
+    syminfo.prefix + ":" + syminfo.ticker + "\n\n" + resolvedMode + " " + _dir + "\n\n" +
+     "Score: " + str.tostring(math.round(_score)) + "/100\n" +
+     "Entry: $" + f_fmtPrice(_entry) + "\n" +
+     "SL: $" + f_fmtPrice(_stop) + "\n" +
+     "T1: $" + f_fmtPrice(_t1) + "\n" +
+     "T2: $" + f_fmtPrice(_t2) + "\n" +
+     "R:R: 1:" + str.tostring(_rr, "#.##") + "\n\n" +
+     "HTF Bias: " + htfBiasLabel + "\n" +
+     "Market Regime: " + marketRegime + "\n" +
+     "RVOL: " + str.tostring(rvol, "#.##") + "\n" +
+     "Liquidity: " + liquidityStatusLabel + "\n" +
+     "Pattern: " + (candlePattern != "NONE" ? candlePattern : chartPattern) + "\n" +
+     "Status: " + _status + "\n" +
+     "(Technical confluence score — not a win probability. Not investment advice.)"
+
+f_buildJSON(_signal, _status) =>
+    _score = _signal == "BUY" ? scoreBull : scoreBear
+    _stop = _signal == "BUY" ? finalStopLong : finalStopShort
+    _t1 = _signal == "BUY" ? target1Long : target1Short
+    _t2 = _signal == "BUY" ? target2Long : target2Short
+    _rr = _signal == "BUY" ? r1Long : r1Short
+    "{\"symbol\":\"" + syminfo.ticker + "\",\"exchange\":\"" + syminfo.prefix + "\",\"timeframe\":\"" + timeframe.period +
+     "\",\"mode\":\"" + resolvedMode + "\",\"signal\":\"" + _signal + "\",\"signal_status\":\"" + _status +
+     "\",\"score\":" + str.tostring(math.round(_score)) + ",\"entry\":" + f_fmtPrice(close) +
+     ",\"stop_loss\":" + f_fmtPrice(_stop) + ",\"target_1\":" + f_fmtPrice(_t1) + ",\"target_2\":" + f_fmtPrice(_t2) +
+     ",\"risk_reward\":" + str.tostring(_rr, "#.##") + ",\"volume_ratio\":" + str.tostring(rvol, "#.##") +
+     ",\"market_regime\":\"" + marketRegime + "\",\"htf_bias\":\"" + htfBiasLabel + "\"}"
+
+alertsOn = enableAlertsInput and barstate.isconfirmed
+
+if alertsOn and newConfirmedBuy
+    alert(f_buildAlertText("BUY", "CONFIRMED") + "\n\nJSON: " + f_buildJSON("BUY", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and newConfirmedSell
+    alert(f_buildAlertText("SELL", "CONFIRMED") + "\n\nJSON: " + f_buildJSON("SELL", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and newConfirmedBuy and dispScoreClass == "STRONG"
+    alert("STRONG BUY\n\n" + f_buildAlertText("BUY", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and newConfirmedSell and dispScoreClass == "STRONG"
+    alert("STRONG SELL\n\n" + f_buildAlertText("SELL", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and newConfirmedBuy and dispScoreClass == "HIGH CONVICTION"
+    alert("HIGH-CONVICTION BUY\n\n" + f_buildAlertText("BUY", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and newConfirmedSell and dispScoreClass == "HIGH CONVICTION"
+    alert("HIGH-CONVICTION SELL\n\n" + f_buildAlertText("SELL", "CONFIRMED"), alert.freq_once_per_bar_close)
+if alertsOn and (sellSideReject or buySideReject)
+    alert("LIQUIDITY SWEEP: " + liquidityStatusLabel + " on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and (mssUp or mssDown)
+    alert("MSS " + (mssUp ? "BULLISH" : "BEARISH") + " on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and freshBullFvgThisBar
+    alert("BULLISH FVG formed on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and freshBearFvgThisBar
+    alert("BEARISH FVG formed on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and bosUp
+    alert("BREAKOUT (BOS) on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and bosDown
+    alert("BREAKDOWN (BOS) on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and orbConfirmedBreakout
+    alert("ORB BREAKOUT (volume-confirmed) on " + syminfo.ticker, alert.freq_once_per_bar_close)
+if alertsOn and orbConfirmedBreakdown
+    alert("ORB BREAKDOWN (volume-confirmed) on " + syminfo.ticker, alert.freq_once_per_bar_close)
+if alertsOn and vwapReclaim
+    alert("VWAP RECLAIM on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and vwapRejection
+    alert("VWAP REJECTION on " + syminfo.ticker + " " + timeframe.period, alert.freq_once_per_bar_close)
+if alertsOn and volumeSpike
+    alert("VOLUME SPIKE (RVOL " + str.tostring(rvol, "#.##") + ") on " + syminfo.ticker, alert.freq_once_per_bar_close)
+if alertsOn and rawFinalState == "NO TRADE" and noTradeReason != "NONE" and (bosUp or bosDown or mssUp or mssDown)
+    alert("NO-TRADE CONDITION: " + noTradeReason, alert.freq_once_per_bar_close)
+
+alertcondition(newConfirmedBuy,  "BUY SETUP",  "Confirmed BUY setup on {{ticker}} {{interval}}")
+alertcondition(newConfirmedSell, "SELL SETUP", "Confirmed SELL setup on {{ticker}} {{interval}}")
+alertcondition(newConfirmedBuy  and dispScoreClass == "STRONG", "STRONG BUY", "Strong confluence BUY on {{ticker}} {{interval}}")
+alertcondition(newConfirmedSell and dispScoreClass == "STRONG", "STRONG SELL", "Strong confluence SELL on {{ticker}} {{interval}}")
+alertcondition(newConfirmedBuy  and dispScoreClass == "HIGH CONVICTION", "HIGH-CONVICTION BUY",  "High-conviction BUY on {{ticker}} {{interval}}")
+alertcondition(newConfirmedSell and dispScoreClass == "HIGH CONVICTION", "HIGH-CONVICTION SELL", "High-conviction SELL on {{ticker}} {{interval}}")
+alertcondition(barstate.isconfirmed and rawFinalState == "NO TRADE", "NO-TRADE CONDITION", "No-trade condition on {{ticker}} {{interval}}")
