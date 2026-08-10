@@ -1333,13 +1333,13 @@ liquidityOk = not instrumentIlliquid
 string noTradeReason = "NONE"
 bool hardBlock = false
 
-if isChoppyRegime and not (qualifiesBull or qualifiesBear)
-    hardBlock := true
-    noTradeReason := "Market is CHOPPY — insufficient evidence to trade."
-else if not sessionOk
+if not sessionOk
     hardBlock := true
     noTradeReason := inOpenProtection ? "Opening observation window — waiting for range to form." :
          pastEODCutoff ? "Past end-of-day cutoff for new intraday entries." : "Outside the configured trading session."
+else if isChoppyRegime and not (qualifiesBull or qualifiesBear)
+    hardBlock := true
+    noTradeReason := "Market is CHOPPY — insufficient evidence to trade."
 else if not liquidityOk
     hardBlock := true
     noTradeReason := noVolumeData ? "DATA LIMITATION — no volume feed available for this symbol/timeframe." : "Liquidity too low for reliable execution (volume-based proxy)."
