@@ -279,13 +279,10 @@ dashPos = switch dashPosInput
 // outside it); "Weekly Close Protection" avoids new intraday risk right
 // before the Friday close / weekend gap window.
 
-f_dateKeyUTC(_t) =>
-    year(_t, "UTC") * 10000 + month(_t, "UTC") * 100 + dayofmonth(_t, "UTC")
-
 anchorMinutes  = f_hhmmToMinutes(dailyAnchorInput)
 utcMinutesNow  = hour(time, "UTC") * 60 + minute(time, "UTC")
 shiftedTime    = time - anchorMinutes * 60000
-tradingDateKey = f_dateKeyUTC(shiftedTime)
+tradingDateKey = math.floor(shiftedTime / 86400000)   // whole UTC days since epoch, shifted by the anchor
 newSessionDay  = tradingDateKey != tradingDateKey[1]
 
 var float sessionStartTime = na

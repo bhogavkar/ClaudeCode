@@ -28,16 +28,20 @@
 //     illiquid names, may differ.
 // =============================================================================
 
+// NOTE: initial_capital / commission / slippage below must be plain constants -- Pine's strategy()
+// declaration requires `const`, and input.*() results (even though they look constant) do not
+// qualify. Adjust these instead via the Strategy Tester's own "Properties" tab (Initial capital,
+// Commission, Slippage, Base currency, Order size), which TradingView provides natively for exactly
+// this and applies without touching the source.
 strategy(title = "Indian Market Swing + Intraday Trading System [Strategy]",
      shorttitle = "IMS-System-BT",
      overlay = true,
-     initial_capital = input.float(1000000, "Initial Capital (₹)", group = "Backtest Engine"),
+     initial_capital = 1000000,
      default_qty_type = strategy.fixed,
      default_qty_value = 1,
      commission_type = strategy.commission.percent,
-     commission_value = input.float(0.03, "Commission per Side (%)", group = "Backtest Engine",
-         tooltip = "Approximate. Real NSE/BSE charges (STT, stamp duty, exchange/SEBI fees, GST, brokerage) vary by segment (equity delivery vs intraday vs F&O) — tune this to your broker/segment."),
-     slippage = input.int(1, "Slippage (ticks per fill)", minval = 0, group = "Backtest Engine"),
+     commission_value = 0.03,
+     slippage = 1,
      pyramiding = 1,   // max concurrent positions fixed at 1 (conservative default) — see Section 30
      calc_on_order_fills = true,
      calc_on_every_tick = false,
