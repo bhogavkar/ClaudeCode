@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Risk Ranger</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%96%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="game-canvas" aria-label="Risk Ranger game canvas" role="img"></canvas>
+
+  <div id="hud" class="hud hidden" aria-live="polite">
+    <div class="hud-left">
+      <div class="hud-card">
+        <span class="hud-label">SCORE</span>
+        <span class="hud-value" id="hud-score">0</span>
+      </div>
+      <div class="hud-streak hidden" id="hud-streak">🔥 ×0</div>
+    </div>
+    <div class="hud-pill" id="hud-level">CANYON LEVEL 1</div>
+    <div class="hud-right">
+      <div class="hud-card">
+        <span class="hud-label">BEST</span>
+        <span class="hud-value" id="hud-best">0</span>
+      </div>
+      <div class="hud-icons">
+        <button class="icon-btn" id="btn-pause" aria-label="Pause game">⏸</button>
+        <button class="icon-btn" id="btn-mute" aria-label="Toggle sound">🔊</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tap-hint" class="tap-hint hidden">HOLD &amp; RELEASE</div>
+
+  <div id="screen-loading" class="screen">
+    <div class="panel loading-panel">
+      <h1 class="title-sm">RISK RANGER</h1>
+      <p>Loading adventure...</p>
+      <div class="loading-bar"><div class="loading-bar-fill" id="loading-fill"></div></div>
+    </div>
+  </div>
+
+  <div id="screen-menu" class="screen hidden">
+    <div class="panel menu-panel">
+      <h1 class="title">RISK RANGER</h1>
+      <p class="tagline">"Hold. Release. Risk it all."</p>
+      <p class="tagline-sub">How far can you go?</p>
+      <div class="menu-best">
+        <span class="hud-label">BEST SCORE</span>
+        <span class="hud-value" id="menu-best">0</span>
+      </div>
+      <div class="btn-stack">
+        <button class="btn-stone btn-primary" id="btn-play">▶ PLAY</button>
+        <button class="btn-stone" id="btn-how-to-play">❓ HOW TO PLAY</button>
+        <button class="btn-stone" id="btn-settings">⚙ SETTINGS</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-how-to-play" class="screen hidden">
+    <div class="panel">
+      <h2 class="title-sm">How To Play</h2>
+      <div class="howto-steps">
+        <div class="howto-step">
+          <div class="howto-icon">✋</div>
+          <div><strong>HOLD</strong><br />Mouse, Space, or Touch to grow the stick</div>
+        </div>
+        <div class="howto-step">
+          <div class="howto-icon">🖐️</div>
+          <div><strong>RELEASE</strong><br />at the right moment to drop the stick</div>
+        </div>
+        <div class="howto-step">
+          <div class="howto-icon">🎯</div>
+          <div><strong>LAND ON THE RED MARK</strong><br />for 2X points</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-stone" id="btn-howto-back">Go Back</button>
+        <button class="btn-stone btn-primary" id="btn-howto-continue">Got it! ▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-character-select" class="screen hidden">
+    <div class="panel wide-panel">
+      <h2 class="title-sm">Choose your Risk Ranger!</h2>
+      <p class="subtitle">Armed with risk awareness and knowledge,<br />Risk Ranger acts with caution and navigates the canyon.</p>
+      <div class="character-grid" id="character-grid"></div>
+      <div class="btn-row">
+        <button class="btn-stone" id="btn-char-back">Go Back</button>
+        <button class="btn-stone btn-primary" id="btn-char-confirm">Confirm &amp; Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-settings" class="screen hidden">
+    <div class="panel">
+      <h2 class="title-sm">Settings</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <span>🎵 Music</span>
+          <button class="toggle" id="toggle-music" aria-pressed="true"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="setting-row">
+          <span>🔊 Sound FX</span>
+          <button class="toggle" id="toggle-sfx" aria-pressed="true"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="setting-row">
+          <span>📳 Vibration</span>
+          <button class="toggle" id="toggle-vibration" aria-pressed="true"><span class="toggle-knob"></span></button>
+        </div>
+        <div class="setting-row">
+          <span>✨ Quality</span>
+          <div class="quality-buttons" id="quality-buttons">
+            <button data-q="low">LOW</button>
+            <button data-q="medium">MED</button>
+            <button data-q="high">HIGH</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-stone btn-primary" id="btn-settings-back">Go Back</button>
+    </div>
+  </div>
+
+  <div id="screen-pause" class="screen hidden">
+    <div class="panel pause-panel">
+      <h2 class="title-sm">Game Paused</h2>
+      <p>Looks like you needed a quick breather! Don't worry — we paused everything while you were away.</p>
+      <div class="btn-stack">
+        <button class="btn-stone btn-primary" id="btn-resume">Resume</button>
+        <button class="btn-stone" id="btn-pause-restart">🔄 Restart</button>
+        <button class="btn-stone" id="btn-pause-settings">⚙ Settings</button>
+        <button class="btn-stone" id="btn-pause-menu">⌂ Main Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-gameover" class="screen hidden">
+    <div class="panel gameover-panel">
+      <div class="gameover-badge">💥</div>
+      <h2 class="title-sm">OH NO!</h2>
+      <div class="new-best hidden" id="gameover-newbest">🏆 NEW HIGH SCORE!</div>
+      <div class="stat-grid">
+        <div class="stat-card"><span class="hud-label">FINAL SCORE</span><span class="stat-value" id="go-score">0</span></div>
+        <div class="stat-card"><span class="hud-label">CROSSINGS</span><span class="stat-value" id="go-crossings">0</span></div>
+        <div class="stat-card"><span class="hud-label">BEST SCORE</span><span class="stat-value" id="go-best">0</span></div>
+      </div>
+      <div class="rank-line" id="go-rank">Beginner</div>
+      <div class="btn-row">
+        <button class="btn-stone" id="btn-gameover-menu">⌂ Main Menu</button>
+        <button class="btn-stone btn-primary" id="btn-gameover-retry">🔄 Try Again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
