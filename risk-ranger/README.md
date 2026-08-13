@@ -6,7 +6,9 @@ An endless browser arcade game: hold to grow a bamboo stick, release to drop it 
 
 ## Run it locally
 
-Browsers block `type="module"` scripts from loading over `file://`, so serve the folder instead of double-clicking `index.html`:
+**Quickest option:** double-click **`standalone.html`**. It's a single self-contained file (same game, everything inlined) with no server required — open it directly in any browser.
+
+**Developing on the source:** `index.html` loads the game as ES modules from `js/`, which browsers block from `file://` for CORS reasons, so serve the folder instead of double-clicking it:
 
 ```bash
 cd risk-ranger
@@ -14,7 +16,7 @@ python3 -m http.server 8080
 # then open http://localhost:8080 in a browser
 ```
 
-Any static file server works (`npx serve`, `php -S localhost:8080`, the VS Code "Live Server" extension, etc).
+Any static file server works (`npx serve`, `php -S localhost:8080`, the VS Code "Live Server" extension, etc). `standalone.html` is generated from the `js/` source and `style.css` — if you change the source, regenerate it (concatenate the files listed below in dependency order, stripping `import`/`export`, and inline the result plus the CSS into one HTML file) before shipping it as the double-click-to-play copy.
 
 ## How to play
 
@@ -29,6 +31,7 @@ Controls work identically on desktop (mouse/space) and mobile (touch). Best scor
 
 ```
 risk-ranger/
+├── standalone.html      Single-file bundle of everything below — just open it
 ├── index.html          All screens (menu, how-to-play, character select,
 │                        settings, pause, game over) + HUD + canvas
 ├── style.css            Visual styling, responsive layout, stone-tablet UI

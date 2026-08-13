@@ -24,6 +24,10 @@ export class InputManager {
     document.addEventListener('visibilitychange', this._onBlur);
   }
 
+  get isHeld() {
+    return this._active;
+  }
+
   _press() {
     if (this._active) return;
     this._active = true;

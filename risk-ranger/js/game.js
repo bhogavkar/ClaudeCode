@@ -219,9 +219,18 @@ export class Game {
     this._gameOverTriggered = false;
     this.stick.reset(this._pivotOfPlatform(this.platforms.get(0)), GROUND_Y);
     this.appState = AppState.PLAYING;
-    this.roundPhase = RoundPhase.IDLE;
-    this.ui.showTapHint(true);
     this._updateHud();
+    this._onRoundBecomesIdle();
+    if (this.roundPhase === RoundPhase.IDLE) {
+      this.ui.showTapHint(true);
+    }
+  }
+
+  _onRoundBecomesIdle() {
+    this.roundPhase = RoundPhase.IDLE;
+    if (this.input.isHeld) {
+      this._onPressStart();
+    }
   }
 
   _onPressStart() {
@@ -285,8 +294,8 @@ export class Game {
     this.roundPhase = RoundPhase.SETTLING;
     this.player.setState(PlayerState.WALKING);
     this.player.startWalk(settleX, () => {
-      this.roundPhase = RoundPhase.IDLE;
       this.stick.reset(settleX, GROUND_Y);
+      this._onRoundBecomesIdle();
     });
   }
 
