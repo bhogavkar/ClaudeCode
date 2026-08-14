@@ -182,6 +182,13 @@ export class AudioManager {
     });
   }
 
+  playSessionComplete() {
+    this._ensureContext();
+    [392, 494, 587, 784].forEach((f, i) => {
+      this._tone(f, 0.22, { type: 'triangle', gain: 0.2, when: i * 0.09 });
+    });
+  }
+
   _startAmbience() {
     if (!this.ctx || this.ambienceTimer) return;
     const drone1 = this.ctx.createOscillator();

@@ -14,19 +14,30 @@
   <div id="hud" class="hud hidden" aria-live="polite">
     <div class="hud-left">
       <div class="hud-card">
-        <span class="hud-label">SCORE</span>
-        <span class="hud-value" id="hud-score">0</span>
+        <span class="hud-label">TIME</span>
+        <span class="hud-value" id="hud-time">07m 00s</span>
       </div>
-      <div class="hud-streak hidden" id="hud-streak">🔥 ×0</div>
+      <div class="hud-card">
+        <span class="hud-label">NEXT QUIZ</span>
+        <span class="hud-value" id="hud-next-quiz">30s</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">QUIZ</span>
+        <span class="hud-value" id="hud-quiz-progress">0 / 14</span>
+      </div>
     </div>
-    <div class="hud-pill" id="hud-level">CANYON LEVEL 1</div>
+    <div class="hud-pill" id="hud-day">Day 1</div>
     <div class="hud-right">
       <div class="hud-card">
-        <span class="hud-label">BEST</span>
-        <span class="hud-value" id="hud-best">0</span>
+        <span class="hud-label">SCORE</span>
+        <span class="hud-value" id="hud-score">0.00</span>
+      </div>
+      <div class="hud-card">
+        <span class="hud-label">CROSSINGS</span>
+        <span class="hud-value" id="hud-crossings">0</span>
       </div>
       <div class="hud-icons">
-        <button class="icon-btn" id="btn-pause" aria-label="Pause game">⏸</button>
+        <button class="icon-btn" id="btn-info" aria-label="How to play">ⓘ</button>
         <button class="icon-btn" id="btn-mute" aria-label="Toggle sound">🔊</button>
       </div>
     </div>
@@ -86,7 +97,7 @@
   <div id="screen-character-select" class="screen hidden">
     <div class="panel wide-panel">
       <h2 class="title-sm">Choose your Risk Ranger!</h2>
-      <p class="subtitle">Armed with risk awareness and knowledge,<br />Risk Ranger acts with caution and navigates the canyon.</p>
+      <p class="subtitle">Armed with risk awareness and knowledge,<br />Risk Ranger acts with caution and navigates the herd.</p>
       <div class="character-grid" id="character-grid"></div>
       <div class="btn-row">
         <button class="btn-stone" id="btn-char-back">Go Back</button>
@@ -127,31 +138,49 @@
   <div id="screen-pause" class="screen hidden">
     <div class="panel pause-panel">
       <h2 class="title-sm">Game Paused</h2>
-      <p>Looks like you needed a quick breather! Don't worry — we paused everything while you were away.</p>
-      <div class="btn-stack">
-        <button class="btn-stone btn-primary" id="btn-resume">Resume</button>
-        <button class="btn-stone" id="btn-pause-restart">🔄 Restart</button>
-        <button class="btn-stone" id="btn-pause-settings">⚙ Settings</button>
-        <button class="btn-stone" id="btn-pause-menu">⌂ Main Menu</button>
-      </div>
+      <p>Looks like you needed a quick breather! Don't worry, we paused your game and timer while you were away, so you didn't lose out on any time.</p>
+      <button class="btn-stone btn-primary" id="btn-resume">Resume</button>
+    </div>
+  </div>
+
+  <div id="screen-quiz" class="screen hidden">
+    <div class="panel quiz-panel">
+      <div class="quiz-progress" id="quiz-progress-label">Quiz 1 of 14</div>
+      <h2 class="title-sm quiz-question" id="quiz-question">Question?</h2>
+      <div class="quiz-options" id="quiz-options"></div>
     </div>
   </div>
 
   <div id="screen-gameover" class="screen hidden">
     <div class="panel gameover-panel">
-      <div class="gameover-badge">💥</div>
-      <h2 class="title-sm">OH NO!</h2>
-      <div class="new-best hidden" id="gameover-newbest">🏆 NEW HIGH SCORE!</div>
+      <div class="gameover-badge" id="gameover-badge"></div>
+      <h2 class="title-sm" id="go-title">The herd made it!</h2>
+      <div class="sweepstakes-box" id="go-sweepstakes">
+        <p>You have already entered today's sweepstakes and stood a chance to win Vantage Points*.</p>
+        <p class="tnc"><em><a href="#" id="go-tnc-link">*T&amp;C Apply</a></em></p>
+      </div>
       <div class="stat-grid">
-        <div class="stat-card"><span class="hud-label">FINAL SCORE</span><span class="stat-value" id="go-score">0</span></div>
+        <div class="stat-card"><span class="hud-label">FINAL SCORE</span><span class="stat-value" id="go-score">0.00</span></div>
         <div class="stat-card"><span class="hud-label">CROSSINGS</span><span class="stat-value" id="go-crossings">0</span></div>
-        <div class="stat-card"><span class="hud-label">BEST SCORE</span><span class="stat-value" id="go-best">0</span></div>
+        <div class="stat-card"><span class="hud-label">BEST SCORE</span><span class="stat-value" id="go-best">0.00</span></div>
       </div>
-      <div class="rank-line" id="go-rank">Beginner</div>
       <div class="btn-row">
-        <button class="btn-stone" id="btn-gameover-menu">⌂ Main Menu</button>
-        <button class="btn-stone btn-primary" id="btn-gameover-retry">🔄 Try Again</button>
+        <button class="btn-stone" id="btn-gameover-feedback">Share Feedback</button>
+        <button class="btn-stone btn-primary" id="btn-gameover-retry">Play Again</button>
       </div>
+      <p class="feedback-note hidden" id="go-feedback-note">Thanks for the feedback! (This demo doesn't send it anywhere.)</p>
+    </div>
+  </div>
+
+  <div id="screen-tnc" class="screen hidden">
+    <div class="panel">
+      <h2 class="title-sm">Terms &amp; Conditions</h2>
+      <p class="subtitle" style="text-align:left">
+        This is a standalone demo game with no real backend. Nothing you do here enters any actual
+        sweepstakes, collects your data, or awards real prizes — the "Vantage Points" sweepstakes
+        message is placeholder flavor text matching the requested interface, not a functioning promotion.
+      </p>
+      <button class="btn-stone btn-primary" id="btn-tnc-back">Go Back</button>
     </div>
   </div>
 </div>

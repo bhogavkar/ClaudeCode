@@ -2,7 +2,9 @@
 
 _"Hold. Release. Risk it all."_
 
-An endless browser arcade game: hold to grow a bamboo stick, release to drop it across a gap, and cross a canyon one platform at a time. Land in the red target zone for a 2X score bonus. Every visual (the canyon, the parallax sky, the three playable dinosaur rangers) is drawn live on `<canvas>` — no image assets — and every sound effect is synthesized at runtime with the Web Audio API, so the game runs from nothing but the files in this folder.
+A timed browser session (7 minutes) where you hold to grow a bamboo stick, release to drop it across a gap, and cross a canyon one platform at a time as one of three dinosaur rangers. Land in the red target zone for a 2X score bonus. A quiz pops up periodically (14 total) and a "Day" counter tracks which calendar day of play this is; the session ends positively ("The herd made it!") when time runs out, regardless of how you did — falling short just respawns you to try that gap again. Every visual is drawn live on `<canvas>` — no image assets — and every sound effect is synthesized at runtime with the Web Audio API, so the game runs from nothing but the files in this folder.
+
+The quiz questions are generic placeholder risk-awareness trivia (`js/quizBank.js`) — swap them for real content if you have it. The end screen's "you've entered today's sweepstakes for Vantage Points" message is flavor text matching a requested visual reference; there's no backend, so nothing is actually entered anywhere (the in-game "T&C Apply" link says so explicitly).
 
 ## Run it locally
 
@@ -22,10 +24,11 @@ Any static file server works (`npx serve`, `php -S localhost:8080`, the VS Code 
 
 - **Hold** the mouse button, spacebar, or a touch to grow the stick.
 - **Release** at the right moment to drop it across the gap.
-- Land **on the platform** to cross safely (+10). Land **in the red zone** for a perfect crossing (+20, "2X"). Miss short or overshoot past the far edge and you fall — run over.
-- Chain crossings for streak bonuses (3, 5, 10+ in a row). Difficulty (gap size, platform width, target size) ramps up gradually as your crossing count climbs, and is always generated so a correctly-timed release can reach it — misses come from timing, not bad luck.
+- Land **on the platform** to cross safely (+1.00). Land **in the red zone** for a perfect crossing (+2.00, "2X"). Miss short or overshoot past the far edge and you fall — you respawn on the same platform to try again, no penalty beyond losing that attempt's points.
+- Chain crossings for streak bonuses. Difficulty (gap size, platform width, target size) ramps up gradually as your crossing count climbs, and is always generated so a correctly-timed release can reach it — misses come from timing, not bad luck.
+- Every so often a quiz interrupts with a quick multiple-choice question; answer it and play resumes. The session itself ends when the 7-minute clock runs out.
 
-Controls work identically on desktop (mouse/space) and mobile (touch). Best score, best crossings, best streak, your chosen ranger, and all settings persist in `localStorage`.
+Controls work identically on desktop (mouse/space) and mobile (touch). Best score, best crossings, your chosen ranger, the campaign start date (used to compute "Day N"), and all settings persist in `localStorage`.
 
 ## Project structure
 
@@ -38,8 +41,9 @@ risk-ranger/
 └── js/
     ├── main.js           Boot entry point
     ├── game.js           State machine + main loop, wires every system together
-    ├── constants.js       Tunable numbers (stick speed, difficulty curve, etc.)
-    ├── utils.js            Math helpers (lerp, easing, random ranges)
+    ├── constants.js       Tunable numbers (stick speed, difficulty curve, session/quiz timing, etc.)
+    ├── quizBank.js          14 placeholder risk-awareness quiz questions
+    ├── utils.js            Math helpers (lerp, easing, random ranges, date/score formatting)
     ├── stick.js            Bamboo stick growth/rotation physics
     ├── platformManager.js  Procedural platform generation + fairness constraints
     ├── difficulty.js       Difficulty curve (gap/width/target ranges by level)

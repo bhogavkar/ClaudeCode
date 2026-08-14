@@ -23,7 +23,7 @@ export class ScoreManager {
 
     let points = SCORE.BASE;
     if (perfect) points *= SCORE.PERFECT_MULT;
-    if (golden) points += 15;
+    if (golden) points += 1.5;
 
     const streakBonus = SCORE.STREAK_BONUS[this.streak] || 0;
     points += streakBonus;

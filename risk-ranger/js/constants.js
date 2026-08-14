@@ -25,9 +25,19 @@ export const DIFFICULTY = {
 };
 
 export const SCORE = {
-  BASE: 10,
+  BASE: 1.0,
   PERFECT_MULT: 2,
-  STREAK_BONUS: { 3: 5, 5: 10, 10: 25, 15: 25, 20: 25 },
+  STREAK_BONUS: { 3: 0.5, 5: 1.0, 10: 2.5, 15: 2.5, 20: 2.5 },
+};
+
+export const SESSION = {
+  TOTAL_SECONDS: 7 * 60,
+};
+
+export const QUIZ = {
+  TOTAL: 14,
+  INTERVAL_SECONDS: 45,
+  FIRST_INTERVAL_SECONDS: 30,
 };
 
 export const STORAGE_KEYS = {
@@ -37,6 +47,8 @@ export const STORAGE_KEYS = {
   SETTINGS: 'settings',
   CHARACTER: 'character',
   SEEN_TUTORIAL: 'seenTutorial',
+  CAMPAIGN_START: 'campaignStartDate',
+  LAST_PLAYED_DAY: 'lastPlayedDayNumber',
 };
 
 export const DEFAULT_SETTINGS = {
@@ -84,19 +96,3 @@ export const CHARACTERS = [
     neckLength: 0.35,
   },
 ];
-
-export const RANKS = [
-  { min: 0, name: 'Beginner' },
-  { min: 10, name: 'Explorer' },
-  { min: 25, name: 'Risk Ranger' },
-  { min: 50, name: 'Master Ranger' },
-  { min: 100, name: 'Legend' },
-];
-
-export function rankForCrossings(n) {
-  let rank = RANKS[0].name;
-  for (const r of RANKS) {
-    if (n >= r.min) rank = r.name;
-  }
-  return rank;
-}

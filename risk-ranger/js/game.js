@@ -10,7 +10,19 @@ import { ScoreManager } from './scoreManager.js';
 import { UIManager } from './uiManager.js';
 import { storage } from './storageManager.js';
 import { levelForCrossings } from './difficulty.js';
-import { CHARACTERS, STORAGE_KEYS, DEFAULT_SETTINGS, GROUND_Y, PLATFORM, VIRTUAL_HEIGHT, STICK } from './constants.js';
+import { QUIZ_BANK } from './quizBank.js';
+import { todayDateString, daysSince } from './utils.js';
+import {
+  CHARACTERS,
+  STORAGE_KEYS,
+  DEFAULT_SETTINGS,
+  GROUND_Y,
+  PLATFORM,
+  VIRTUAL_HEIGHT,
+  STICK,
+  SESSION,
+  QUIZ,
+} from './constants.js';
 
 const AppState = {
   LOADING: 'loading',
@@ -59,9 +71,17 @@ export class Game {
     this.timeSec = 0;
     this.lastTs = 0;
     this._flashAlpha = 0;
-    this._gameOverTriggered = false;
+    this._respawnPending = false;
     this._tutorialContext = 'menu';
     this._roundTimer = 0;
+
+    this.dayNumber = this._computeDayNumber();
+    this.sessionTimeLeft = SESSION.TOTAL_SECONDS;
+    this.nextQuizIn = QUIZ.FIRST_INTERVAL_SECONDS;
+    this.quizIndex = 0;
+    this.quizActive = false;
+    this.quizAnswered = false;
+    this.quizCloseTimer = 0;
 
     this.ui = new UIManager(this._buildCallbacks());
     this.input = new InputManager(this.canvas);
@@ -71,7 +91,7 @@ export class Game {
     window.addEventListener('resize', () => this._handleResize());
     document.addEventListener('visibilitychange', () => this._handleVisibility());
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Escape') this._togglePauseFromIcon();
+      if (e.code === 'Escape') this._togglePause();
     });
 
     const unlockOnce = () => this.audio.unlock();
@@ -105,6 +125,15 @@ export class Game {
     requestAnimationFrame((ts) => this._loop(ts));
   }
 
+  _computeDayNumber() {
+    let start = storage.get(STORAGE_KEYS.CAMPAIGN_START, null);
+    if (!start) {
+      start = todayDateString();
+      storage.set(STORAGE_KEYS.CAMPAIGN_START, start);
+    }
+    return daysSince(start) + 1;
+  }
+
   _paletteFor(id) {
     return CHARACTERS.find((c) => c.id === id) || CHARACTERS[0];
   }
@@ -129,27 +158,36 @@ export class Game {
         this._tutorialContext = 'menu';
         this.ui.showScreen('screen-how-to-play');
       },
+      onInfoIcon: () => {
+        if (this.appState === AppState.PLAYING) {
+          this._pause();
+          this._tutorialContext = 'pause-info';
+        } else {
+          this._tutorialContext = 'menu';
+        }
+        this.ui.showScreen('screen-how-to-play');
+      },
       onHowToPlayBack: () => {
-        this._tutorialContext = 'menu';
-        this.ui.showScreen('screen-menu');
+        if (this._tutorialContext === 'pause-info') {
+          this.ui.showScreen('screen-pause');
+        } else {
+          this.ui.showScreen('screen-menu');
+        }
       },
       onHowToPlayContinue: () => {
         storage.set(STORAGE_KEYS.SEEN_TUTORIAL, true);
-        const wasPreplay = this._tutorialContext === 'preplay';
-        this._tutorialContext = 'menu';
-        if (wasPreplay) this._startRun();
-        else this._goToMenu();
+        if (this._tutorialContext === 'preplay') {
+          this._startRun();
+        } else if (this._tutorialContext === 'pause-info') {
+          this.ui.showScreen('screen-pause');
+        } else {
+          this._goToMenu();
+        }
       },
       onCharConfirm: () => this._confirmCharacterAndStart(),
       onPauseResume: () => this._resume(),
-      onPauseRestart: () => {
-        this._resume();
-        this._startRun();
-      },
-      onPauseMenu: () => this._goToMenu(),
       onGameOverRetry: () => this._startRun(),
-      onGameOverMenu: () => this._goToMenu(),
-      onPauseIcon: () => this._togglePauseFromIcon(),
+      onShareFeedback: () => this.ui.showFeedbackThanks(),
       onMuteIcon: () => this._toggleMuteFromIcon(),
       onToggleMusic: (on) => {
         this.settings.music = on;
@@ -210,13 +248,18 @@ export class Game {
   _startRun() {
     this.ui.hideAllScreens();
     this.ui.showHud(true);
-    this.ui.setPauseIcon(false);
     this.score.resetRun();
     this.platforms.init();
     this._placePlayerOnPlatform(this.platforms.get(0));
     this.camera.snap(this.player.x, this.renderer.viewWidth);
     this.currentIndex = 0;
-    this._gameOverTriggered = false;
+    this._respawnPending = false;
+    this.dayNumber = this._computeDayNumber();
+    this.sessionTimeLeft = SESSION.TOTAL_SECONDS;
+    this.nextQuizIn = QUIZ.FIRST_INTERVAL_SECONDS;
+    this.quizIndex = 0;
+    this.quizActive = false;
+    this.quizAnswered = false;
     this.stick.reset(this._pivotOfPlatform(this.platforms.get(0)), GROUND_Y);
     this.appState = AppState.PLAYING;
     this._updateHud();
@@ -234,7 +277,7 @@ export class Game {
   }
 
   _onPressStart() {
-    if (this.appState !== AppState.PLAYING || this.roundPhase !== RoundPhase.IDLE) return;
+    if (this.appState !== AppState.PLAYING || this.roundPhase !== RoundPhase.IDLE || this.quizActive) return;
     this.ui.showTapHint(false);
     this.roundPhase = RoundPhase.CHARGING;
     this.player.setState(PlayerState.CHARGING);
@@ -306,7 +349,19 @@ export class Game {
     this.player.startWalk(fallX, null, { thenFall: true });
     this.camera.shake(6, 0.4);
     this._vibrate(35);
+    this._respawnPending = true;
     this._updateHud();
+  }
+
+  _respawn() {
+    const cur = this.platforms.get(this.currentIndex);
+    const pivotX = this._pivotOfPlatform(cur);
+    this.player.tilt = 0;
+    this.player.fallVy = 0;
+    this.player.setPosition(pivotX, GROUND_Y);
+    this.player.setState(PlayerState.IDLE);
+    this.stick.reset(pivotX, GROUND_Y);
+    this._onRoundBecomesIdle();
   }
 
   _spawnCrossingFeedback(result, perfect, platform) {
@@ -318,18 +373,18 @@ export class Game {
       this.particles.spawnBurst(px, py, 14, { color: '#ffd76a', speed: 210, life: 0.85 });
       this.particles.spawnBurst(px, py, 10, { color: '#ff6b6b', speed: 190, life: 0.8 });
       this.particles.spawnBurst(px, py, 10, { color: '#6bc7ff', speed: 190, life: 0.8 });
-      this.particles.spawnFloatingText(px, py - 6, `+${result.points}`, { color: '#ffd76a', size: 24 });
+      this.particles.spawnFloatingText(px, py - 6, `+${result.points.toFixed(2)}`, { color: '#ffd76a', size: 24 });
       this.particles.spawnFloatingText(px, py - 30, 'PERFECT! 2X', { color: '#fff', size: 15, life: 1.3, vy: -30 });
       this._flashAlpha = 0.45;
       this._vibrate([15, 30, 15]);
     } else {
       this.audio.playSuccess();
       this.particles.spawnBurst(px, py, 8, { color: '#d8c9a0', speed: 90, life: 0.5, gravity: 320 });
-      this.particles.spawnFloatingText(px, py - 6, `+${result.points}`, { color: '#fff', size: 19 });
+      this.particles.spawnFloatingText(px, py - 6, `+${result.points.toFixed(2)}`, { color: '#fff', size: 19 });
     }
 
     if (result.streakBonus) {
-      this.particles.spawnFloatingText(px, py - (perfect ? 52 : 30), `STREAK BONUS +${result.streakBonus}`, {
+      this.particles.spawnFloatingText(px, py - (perfect ? 52 : 30), `STREAK BONUS +${result.streakBonus.toFixed(2)}`, {
         color: '#ff9d5c',
         size: 15,
         life: 1.3,
@@ -348,17 +403,37 @@ export class Game {
     }
   }
 
+  _triggerQuiz() {
+    this.quizActive = true;
+    this.quizAnswered = false;
+    this.audio.stopGrowLoop();
+    const q = QUIZ_BANK[this.quizIndex % QUIZ_BANK.length];
+    this.ui.showQuiz(q, this.quizIndex, QUIZ.TOTAL, () => {
+      this.quizAnswered = true;
+      this.quizCloseTimer = 0.9;
+    });
+  }
+
+  _closeQuiz() {
+    this.quizIndex += 1;
+    this.nextQuizIn = QUIZ.INTERVAL_SECONDS;
+    this.quizActive = false;
+    this.ui.hideAllScreens();
+    this._updateHud();
+  }
+
   _endRun() {
     this.appState = AppState.GAME_OVER;
-    this.audio.playGameOver();
-    this._vibrate([40, 40, 60]);
+    this.quizActive = false;
+    this.audio.playSessionComplete();
+    this._vibrate([20, 30, 20, 30, 40]);
     const stats = this.score.finalizeRun();
     this.ui.showHud(false);
     this.ui.showGameOver(stats);
     this.ui.updateMenuBest(stats.best);
   }
 
-  _togglePauseFromIcon() {
+  _togglePause() {
     if (this.appState === AppState.PLAYING) this._pause();
     else if (this.appState === AppState.PAUSED) this._resume();
   }
@@ -366,7 +441,6 @@ export class Game {
   _pause() {
     if (this.appState !== AppState.PLAYING) return;
     this.appState = AppState.PAUSED;
-    this.ui.setPauseIcon(true);
     this.ui.showTapHint(false);
     this.ui.showScreen('screen-pause');
     this.audio.stopGrowLoop();
@@ -375,10 +449,13 @@ export class Game {
   _resume() {
     if (this.appState !== AppState.PAUSED) return;
     this.appState = AppState.PLAYING;
-    this.ui.setPauseIcon(false);
-    this.ui.hideAllScreens();
-    if (this.roundPhase === RoundPhase.IDLE && this.currentIndex === 0) {
-      this.ui.showTapHint(true);
+    if (this.quizActive) {
+      this.ui.showScreen('screen-quiz');
+    } else {
+      this.ui.hideAllScreens();
+      if (this.roundPhase === RoundPhase.IDLE && this.currentIndex === 0) {
+        this.ui.showTapHint(true);
+      }
     }
     this.lastTs = 0;
   }
@@ -426,10 +503,13 @@ export class Game {
 
   _updateHud() {
     this.ui.updateHud({
+      timeLeft: this.sessionTimeLeft,
+      nextQuizIn: this.nextQuizIn,
+      quizDone: this.quizIndex,
+      quizTotal: QUIZ.TOTAL,
+      day: this.dayNumber,
       score: this.score.score,
-      best: this.score.best,
-      level: levelForCrossings(this.score.crossings),
-      streak: this.score.streak,
+      crossings: this.score.crossings,
     });
   }
 
@@ -461,6 +541,14 @@ export class Game {
   }
 
   _update(dt) {
+    if (this.quizActive) {
+      if (this.quizAnswered) {
+        this.quizCloseTimer -= dt;
+        if (this.quizCloseTimer <= 0) this._closeQuiz();
+      }
+      return;
+    }
+
     this.stick.update(dt);
     this.player.update(dt);
 
@@ -473,14 +561,33 @@ export class Game {
       this.audio.updateGrowLoop(this.stick.length / STICK.MAX_LENGTH);
     }
 
-    if (this.player.state === PlayerState.FALLING && this.player.y > VIRTUAL_HEIGHT + 120 && !this._gameOverTriggered) {
-      this._gameOverTriggered = true;
-      this._endRun();
+    if (this.player.state === PlayerState.FALLING && this.player.y > VIRTUAL_HEIGHT + 120 && this._respawnPending) {
+      this._respawnPending = false;
+      this._respawn();
     }
 
     this.camera.follow(this.player.x, this.renderer.viewWidth);
     this.camera.update(dt);
     this.platforms.pruneBefore(this.camera.x - 260);
+
+    this.sessionTimeLeft -= dt;
+    if (this.sessionTimeLeft <= 0) {
+      this.sessionTimeLeft = 0;
+      this._updateHud();
+      this._endRun();
+      return;
+    }
+
+    if (this.quizIndex < QUIZ.TOTAL) {
+      this.nextQuizIn -= dt;
+      if (this.nextQuizIn <= 0) {
+        this._triggerQuiz();
+        this._updateHud();
+        return;
+      }
+    }
+
+    this._updateHud();
   }
 
   _render() {

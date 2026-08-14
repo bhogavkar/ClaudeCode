@@ -1,5 +1,5 @@
-import { rankForCrossings } from './constants.js';
 import { renderThumbnail } from './characterArt.js';
+import { formatScore, formatClock } from './utils.js';
 
 const SCREEN_IDS = [
   'screen-loading',
@@ -8,7 +8,9 @@ const SCREEN_IDS = [
   'screen-character-select',
   'screen-settings',
   'screen-pause',
+  'screen-quiz',
   'screen-gameover',
+  'screen-tnc',
 ];
 
 export class UIManager {
@@ -18,20 +20,23 @@ export class UIManager {
     for (const id of SCREEN_IDS) this.el[id] = document.getElementById(id);
     this.el.hud = document.getElementById('hud');
     this.el.tapHint = document.getElementById('tap-hint');
+    this.el.hudTime = document.getElementById('hud-time');
+    this.el.hudNextQuiz = document.getElementById('hud-next-quiz');
+    this.el.hudQuizProgress = document.getElementById('hud-quiz-progress');
+    this.el.hudDay = document.getElementById('hud-day');
     this.el.hudScore = document.getElementById('hud-score');
-    this.el.hudBest = document.getElementById('hud-best');
-    this.el.hudLevel = document.getElementById('hud-level');
-    this.el.hudStreak = document.getElementById('hud-streak');
+    this.el.hudCrossings = document.getElementById('hud-crossings');
     this.el.menuBest = document.getElementById('menu-best');
     this.el.charGrid = document.getElementById('character-grid');
     this.el.loadingFill = document.getElementById('loading-fill');
     this.el.goScore = document.getElementById('go-score');
     this.el.goCrossings = document.getElementById('go-crossings');
     this.el.goBest = document.getElementById('go-best');
-    this.el.goRank = document.getElementById('go-rank');
-    this.el.goNewBest = document.getElementById('gameover-newbest');
+    this.el.goFeedbackNote = document.getElementById('go-feedback-note');
     this.el.muteBtn = document.getElementById('btn-mute');
-    this.el.pauseBtn = document.getElementById('btn-pause');
+    this.el.quizProgressLabel = document.getElementById('quiz-progress-label');
+    this.el.quizQuestion = document.getElementById('quiz-question');
+    this.el.quizOptions = document.getElementById('quiz-options');
 
     this._settingsReturnTo = 'screen-menu';
     this._bindButtons();
@@ -64,18 +69,18 @@ export class UIManager {
     this._on('btn-settings-back', () => this.showScreen(this._settingsReturnTo));
 
     this._on('btn-resume', () => cb.onPauseResume());
-    this._on('btn-pause-restart', () => cb.onPauseRestart());
-    this._on('btn-pause-settings', () => {
-      this._settingsReturnTo = 'screen-pause';
-      this.showScreen('screen-settings');
-    });
-    this._on('btn-pause-menu', () => cb.onPauseMenu());
 
     this._on('btn-gameover-retry', () => cb.onGameOverRetry());
-    this._on('btn-gameover-menu', () => cb.onGameOverMenu());
+    this._on('btn-gameover-feedback', () => cb.onShareFeedback());
 
-    this._on('btn-pause', () => cb.onPauseIcon());
+    this._on('btn-info', () => cb.onInfoIcon());
     this._on('btn-mute', () => cb.onMuteIcon());
+
+    this._on('go-tnc-link', (e) => {
+      e.preventDefault();
+      this.showScreen('screen-tnc');
+    });
+    this._on('btn-tnc-back', () => this.showScreen('screen-gameover'));
 
     this._on('toggle-music', (e) => this._toggleClicked(e, cb.onToggleMusic));
     this._on('toggle-sfx', (e) => this._toggleClicked(e, cb.onToggleSfx));
@@ -104,6 +109,7 @@ export class UIManager {
       if (!this.el[sid]) continue;
       this.el[sid].classList.toggle('hidden', sid !== id);
     }
+    this.showTapHint(false);
   }
 
   hideAllScreens() {
@@ -124,28 +130,21 @@ export class UIManager {
     this.el.tapHint.classList.toggle('hidden', !show);
   }
 
-  updateHud({ score, best, level, streak }) {
-    this.el.hudScore.textContent = Math.round(score);
-    this.el.hudBest.textContent = Math.round(best);
-    this.el.hudLevel.textContent = `CANYON LEVEL ${level}`;
-    if (streak >= 2) {
-      this.el.hudStreak.textContent = `🔥 ×${streak}`;
-      this.el.hudStreak.classList.remove('hidden');
-    } else {
-      this.el.hudStreak.classList.add('hidden');
-    }
+  updateHud({ timeLeft, nextQuizIn, quizDone, quizTotal, day, score, crossings }) {
+    this.el.hudTime.textContent = formatClock(timeLeft);
+    this.el.hudNextQuiz.textContent = `${Math.max(0, Math.ceil(nextQuizIn))}s`;
+    this.el.hudQuizProgress.textContent = `${quizDone} / ${quizTotal}`;
+    this.el.hudDay.textContent = `Day ${day}`;
+    this.el.hudScore.textContent = formatScore(score);
+    this.el.hudCrossings.textContent = crossings;
   }
 
   updateMenuBest(best) {
-    this.el.menuBest.textContent = Math.round(best);
+    this.el.menuBest.textContent = formatScore(best);
   }
 
   setMuteIcon(muted) {
     this.el.muteBtn.textContent = muted ? '🔇' : '🔊';
-  }
-
-  setPauseIcon(paused) {
-    this.el.pauseBtn.textContent = paused ? '▶' : '⏸';
   }
 
   populateCharacterGrid(characters, selectedId, onSelect) {
@@ -163,11 +162,6 @@ export class UIManager {
       canvas.height = 140;
       canvas.className = 'char-thumb';
       card.appendChild(canvas);
-
-      const label = document.createElement('div');
-      label.className = 'char-name';
-      label.textContent = ch.name;
-      card.appendChild(label);
 
       card.addEventListener('click', () => {
         grid.querySelectorAll('.char-card').forEach((c) => c.classList.remove('selected'));
@@ -195,11 +189,36 @@ export class UIManager {
   }
 
   showGameOver(stats) {
-    this.el.goScore.textContent = Math.round(stats.score);
+    this.el.goScore.textContent = formatScore(stats.score);
     this.el.goCrossings.textContent = stats.crossings;
-    this.el.goBest.textContent = Math.round(stats.best);
-    this.el.goRank.textContent = rankForCrossings(stats.crossings);
-    this.el.goNewBest.classList.toggle('hidden', !stats.isNewBest);
+    this.el.goBest.textContent = formatScore(stats.best);
+    this.el.goFeedbackNote.classList.add('hidden');
     this.showScreen('screen-gameover');
+  }
+
+  showFeedbackThanks() {
+    this.el.goFeedbackNote.classList.remove('hidden');
+  }
+
+  showQuiz(question, index, total, onAnswer) {
+    this.el.quizProgressLabel.textContent = `Quiz ${index + 1} of ${total}`;
+    this.el.quizQuestion.textContent = question.q;
+    const wrap = this.el.quizOptions;
+    wrap.innerHTML = '';
+    question.options.forEach((text, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'quiz-option-btn';
+      btn.textContent = text;
+      btn.addEventListener('click', () => {
+        wrap.querySelectorAll('.quiz-option-btn').forEach((b, bi) => {
+          b.disabled = true;
+          if (bi === question.correct) b.classList.add('correct');
+          else if (bi === i) b.classList.add('incorrect');
+        });
+        onAnswer(i === question.correct);
+      });
+      wrap.appendChild(btn);
+    });
+    this.showScreen('screen-quiz');
   }
 }

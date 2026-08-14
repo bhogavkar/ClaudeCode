@@ -1,0 +1,16 @@
+export const QUIZ_BANK = [
+  { q: 'Before signing up for something online, it’s smart to:', options: ['Read the terms first', 'Click "Accept" as fast as possible', 'Ignore the pop-up entirely'], correct: 0 },
+  { q: 'An email asks you to reply with your password. You should:', options: ['Reply with it if the email looks official', 'Never share your password by email', 'Forward it to a coworker'], correct: 1 },
+  { q: 'A strong password usually:', options: ['Is your birthday', 'Is "password123"', 'Mixes letters, numbers, and symbols'], correct: 2 },
+  { q: 'A deal that looks too good to be true is usually:', options: ['Worth a second look', 'Definitely legit', 'Not worth thinking about'], correct: 0 },
+  { q: 'On public Wi-Fi, it’s safest to:', options: ['Do your banking as normal', 'Avoid entering sensitive information', 'Share your login with the network'], correct: 1 },
+  { q: 'Backing up your data regularly helps you:', options: ['Recover quickly from mistakes', 'Slow down your device', 'Nothing in particular'], correct: 0 },
+  { q: 'Clicking links from unknown senders is:', options: ['Always safe', 'Risky', 'Required to stay updated'], correct: 1 },
+  { q: 'Two-factor authentication mainly:', options: ['Adds an extra layer of security', 'Makes accounts less secure', 'Slows your internet down'], correct: 0 },
+  { q: 'Keeping software up to date mainly helps:', options: ['Waste your time', 'Patch known security issues', 'Slow your device on purpose'], correct: 1 },
+  { q: 'Sharing your live location publicly is:', options: ['Always harmless', 'Worth thinking twice about', 'Required by most apps'], correct: 1 },
+  { q: 'Before clicking "Download," a good habit is to:', options: ['Check the source first', 'Just click it', 'Assume every file is safe'], correct: 0 },
+  { q: 'If something at work feels off, the best move is to:', options: ['Ignore it and move on', 'Assume it’s fine', 'Speak up or report it'], correct: 2 },
+  { q: 'Shredding sensitive documents before disposal helps prevent:', options: ['Identity theft', 'Extra recycling', 'Nothing useful'], correct: 0 },
+  { q: 'The best time to think about risk is:', options: ['After something goes wrong', 'Never', 'Before it happens'], correct: 2 },
+];
